@@ -27,13 +27,30 @@ jobs:
       - name: Restream
         run: |
           URL="${{ inputs.output_url }}"
+          HLS="${{ steps.resolve.outputs.hls }}"
           if [[ "$URL" == srt://* ]]; then
-            FMT=mpegts
+            # Extract passphrase from URL and pass separately
+            PASSPHRASE=$(echo "$URL" | grep -oP 'passphrase=\K[^&]+')
+            STREAMID=$(echo "$URL" | grep -oP 'streamid=\K[^&]+')
+            BASE_URL=$(echo "$URL" | grep -oP 'srt://[^?]+')
+            ffmpeg -nostdin -re \
+              -protocol_whitelist "file,http,https,tcp,tls,crypto,srt" \
+              -fflags +discardcorrupt \
+              -timeout 30000000 \
+              -i "$HLS" \
+              -map 0:v -map 0:a \
+              -c:v copy -c:a copy \
+              -f mpegts \
+              -srtp_latency 2000 \
+              "${BASE_URL}?streamid=${STREAMID}&passphrase=${PASSPHRASE}"
           else
-            FMT=flv
+            ffmpeg -nostdin -re \
+              -protocol_whitelist "file,http,https,tcp,tls,crypto,srt,rtmp,rtmps" \
+              -fflags +discardcorrupt \
+              -timeout 30000000 \
+              -i "$HLS" \
+              -map 0:v -map 0:a \
+              -c:v copy -c:a copy \
+              -f flv \
+              "$URL"
           fi
-          ffmpeg -nostdin -re -timeout 30000000 \
-            -protocol_whitelist "file,http,https,tcp,tls,crypto,srt,rtmp,rtmps" \
-            -i "${{ steps.resolve.outputs.hls }}" \
-            -map 0:v -map 0:a -c:v copy -c:a copy \
-            -f "$FMT" "$URL"
