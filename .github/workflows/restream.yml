@@ -11,6 +11,9 @@ on:
       twitch_key:
         description: Twitch Stream Key
         required: false
+      youtube_key:
+        description: YouTube Stream Key
+        required: false
 
 jobs:
   stream:
@@ -37,6 +40,12 @@ jobs:
           TWITCH_KEY="${{ inputs.twitch_key }}"
           if [[ -n "$TWITCH_KEY" ]]; then
             CMD="$CMD -f flv \"rtmp://live.twitch.tv/app/$TWITCH_KEY\""
+            has_output=true
+          fi
+
+          YT_KEY="${{ inputs.youtube_key }}"
+          if [[ -n "$YT_KEY" ]]; then
+            CMD="$CMD -f flv \"rtmp://a.rtmp.youtube.com/live2/$YT_KEY\""
             has_output=true
           fi
 

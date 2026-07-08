@@ -15,6 +15,7 @@ DEFAULTS = {
     'source_url': 'https://www.twitch.tv/inoxtag',
     'output_url': '',
     'twitch_key': '',
+    'youtube_key': '',
     'backup_list': '',
     'bitrate': '192k',
     'github_token': '',
@@ -43,7 +44,7 @@ def log(msg):
         if len(log_buffer) > 200:
             log_buffer[:] = log_buffer[-200:]
 
-def trigger_workflow(source_url, output_url, twitch_key=''):
+def trigger_workflow(source_url, output_url, twitch_key='', youtube_key=''):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -57,6 +58,8 @@ def trigger_workflow(source_url, output_url, twitch_key=''):
         inputs['output_url'] = output_url
     if twitch_key:
         inputs['twitch_key'] = twitch_key
+    if youtube_key:
+        inputs['youtube_key'] = youtube_key
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -92,7 +95,7 @@ def keepalive_loop():
                     run_id = get_active_run(token, owner, repo)
                     if not run_id:
                         log('Keepalive: re-triggering workflow')
-                        trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''))
+                        trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''), cfg.get('youtube_key',''))
             elif not wanted:
                 time.sleep(30)
                 continue
@@ -135,7 +138,7 @@ def start_stream():
     cfg = load_config()
     if not cfg.get('source_url') or not (cfg.get('output_url') or cfg.get('twitch_key')):
         return jsonify({'ok': False, 'error': 'Missing source URL, and no output or Twitch key configured'})
-    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''))
+    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''), cfg.get('youtube_key',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
@@ -148,11 +151,24 @@ def start_twitch():
     cfg = load_config()
     if not cfg.get('source_url') or not cfg.get('twitch_key'):
         return jsonify({'ok': False, 'error': 'Missing source URL or Twitch key'})
-    msg, err = trigger_workflow(cfg['source_url'], '', cfg.get('twitch_key',''))
+    msg, err = trigger_workflow(cfg['source_url'], '', cfg.get('twitch_key',''), '')
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
     log('Twitch-only workflow triggered')
+    return jsonify({'ok': True, 'msg': msg})
+
+@app.route('/start_youtube')
+def start_youtube():
+    global wanted
+    cfg = load_config()
+    if not cfg.get('source_url') or not cfg.get('youtube_key'):
+        return jsonify({'ok': False, 'error': 'Missing source URL or YouTube key'})
+    msg, err = trigger_workflow(cfg['source_url'], '', '', cfg.get('youtube_key',''))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    wanted = True
+    log('YouTube-only workflow triggered')
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/stop')
@@ -272,6 +288,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="text" name="output_url" id="output_url" placeholder="srt://... or rtmp://...">
     <label style="margin-top:8px">Twitch Stream Key</label>
     <input type="text" name="twitch_key" id="twitch_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
+    <label style="margin-top:8px">YouTube Stream Key</label>
+    <input type="text" name="youtube_key" id="youtube_key" placeholder="xxxx-xxxx-xxxx-xxxx">
   </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -282,6 +300,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div class="actions">
       <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (All)</button>
       <button class="btn btn-purple" id="btnGoTwitch" onclick="goTwitch()">▶ Go Live (Twitch)</button>
+      <button class="btn" id="btnGoYoutube" onclick="goYoutube()" style="background:#ff0000;color:#fff">▶ Go Live (YouTube)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
@@ -339,6 +358,15 @@ function goTwitch() {
     }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoTwitch').disabled = false; });
   });
 }
+function goYoutube() {
+  document.getElementById('btnGoYoutube').disabled = true;
+  addLog('Starting YouTube only...','info');
+  saveConfig(() => {
+    fetch('/start_youtube').then(r=>r.json()).then(d=>{
+      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoYoutube').disabled = false; }
+    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoYoutube').disabled = false; });
+  });
+}
 function stopStream() {
   document.getElementById('btnStop').disabled = true;
   addLog('Stopping...','warn');
@@ -360,12 +388,14 @@ function updateStatus() {
       txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
       document.getElementById('btnGoLive').disabled = true;
       document.getElementById('btnGoTwitch').disabled = true;
+      document.getElementById('btnGoYoutube').disabled = true;
       document.getElementById('btnStop').disabled = false;
     } else {
       dot.className = 'status-dot stopped';
       txt.textContent = '○ Stopped';
       document.getElementById('btnGoLive').disabled = false;
       document.getElementById('btnGoTwitch').disabled = false;
+      document.getElementById('btnGoYoutube').disabled = false;
       document.getElementById('btnStop').disabled = true;
     }
     if(d.config) document.getElementById('keepalive').checked = d.config.keepalive;
