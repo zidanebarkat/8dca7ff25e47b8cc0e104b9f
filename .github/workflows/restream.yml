@@ -26,7 +26,14 @@ jobs:
           echo "hls=$hls" >> $GITHUB_OUTPUT
       - name: Restream
         run: |
+          URL="${{ inputs.output_url }}"
+          if [[ "$URL" == srt://* ]]; then
+            FMT=mpegts
+          else
+            FMT=flv
+          fi
           ffmpeg -nostdin -re -timeout 30000000 \
+            -protocol_whitelist "file,http,https,tcp,tls,crypto,srt,rtmp,rtmps" \
             -i "${{ steps.resolve.outputs.hls }}" \
             -map 0:v -map 0:a -c:v copy -c:a copy \
-            -f flv "${{ inputs.output_url }}"
+            -f "$FMT" "$URL"
