@@ -16,6 +16,13 @@ DEFAULTS = {
     'output_url': '',
     'twitch_key': '',
     'youtube_key': '',
+    'stream_title': '',
+    'stream_description': '',
+    'twitch_client_id': '',
+    'twitch_token': '',
+    'youtube_client_id': '',
+    'youtube_client_secret': '',
+    'youtube_refresh_token': '',
     'backup_list': '',
     'bitrate': '192k',
     'github_token': '',
@@ -212,6 +219,72 @@ def resolve_source():
             pass
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/update_meta')
+def update_meta():
+    cfg = load_config()
+    title = cfg.get('stream_title', '')
+    desc = cfg.get('stream_description', '')
+    results = {}
+
+    # Twitch
+    tid = cfg.get('twitch_token')
+    cid = cfg.get('twitch_client_id')
+    if tid and cid and title:
+        try:
+            # get broadcaster id
+            r = requests.get('https://api.twitch.tv/helix/users',
+                headers={'Authorization': f'Bearer {tid}', 'Client-Id': cid})
+            if r.status_code == 200:
+                uid = r.json()['data'][0]['id']
+                r2 = requests.patch(f'https://api.twitch.tv/helix/channels?broadcaster_id={uid}',
+                    headers={'Authorization': f'Bearer {tid}', 'Client-Id': cid, 'Content-Type': 'application/json'},
+                    json={'title': title})
+                results['twitch'] = 'ok' if r2.status_code in (200,204) else f'HTTP {r2.status_code}'
+            else:
+                results['twitch'] = f'user fetch failed: {r.status_code}'
+        except Exception as e:
+            results['twitch'] = str(e)
+    else:
+        results['twitch'] = 'skipped (no token/client_id)'
+
+    # YouTube
+    yt_cid = cfg.get('youtube_client_id')
+    yt_secret = cfg.get('youtube_client_secret')
+    yt_refresh = cfg.get('youtube_refresh_token')
+    if yt_cid and yt_secret and yt_refresh and title:
+        try:
+            # refresh token -> access token
+            tr = requests.post('https://oauth2.googleapis.com/token', data={
+                'client_id': yt_cid,
+                'client_secret': yt_secret,
+                'refresh_token': yt_refresh,
+                'grant_type': 'refresh_token',
+            })
+            if tr.status_code == 200:
+                access = tr.json()['access_token']
+                # find active broadcast
+                br = requests.get('https://www.googleapis.com/youtube/v3/liveBroadcasts',
+                    params={'part': 'id,snippet', 'mine': 'true', 'broadcastStatus': 'active'},
+                    headers={'Authorization': f'Bearer {access}'})
+                if br.status_code == 200 and br.json().get('items'):
+                    bid = br.json()['items'][0]['id']
+                    body = {'id': bid, 'snippet': {'title': title, 'description': desc or title}, 'status': {'privacyStatus': 'public'}}
+                    ur = requests.put('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status',
+                        headers={'Authorization': f'Bearer {access}', 'Content-Type': 'application/json'},
+                        json=body)
+                    results['youtube'] = 'ok' if ur.status_code in (200,204) else f'HTTP {ur.status_code}'
+                else:
+                    results['youtube'] = 'no active broadcast' if br.status_code == 200 else f'list failed: {br.status_code}'
+            else:
+                results['youtube'] = f'token refresh failed: {tr.status_code}'
+        except Exception as e:
+            results['youtube'] = str(e)
+    else:
+        results['youtube'] = 'skipped (missing credentials)'
+
+    log(f'Update meta: {results}')
+    return jsonify({'ok': True, 'results': results})
+
 HTML_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -242,6 +315,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-grey:hover:not(:disabled){background:#30363d}
 .btn-purple{background:#7c3aed;color:#fff}
 .btn-purple:hover:not(:disabled){background:#8b5cf6}
+.btn-orange{background:#d29922;color:#fff}
+.btn-orange:hover:not(:disabled){background:#e3b341}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -284,6 +359,14 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="source_url" id="source_url" placeholder="https://www.twitch.tv/streamer">
   </div>
   <div class="form-group">
+    <label>Stream Title</label>
+    <input type="text" name="stream_title" id="stream_title" placeholder="My Stream Title">
+  </div>
+  <div class="form-group">
+    <label>Stream Description</label>
+    <textarea name="stream_description" id="stream_description" rows="2" placeholder="Stream description..."></textarea>
+  </div>
+  <div class="form-group">
     <label>Output URL (Kick/Custom)</label>
     <input type="text" name="output_url" id="output_url" placeholder="srt://... or rtmp://...">
     <label style="margin-top:8px">Twitch Stream Key</label>
@@ -301,11 +384,38 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (All)</button>
       <button class="btn btn-purple" id="btnGoTwitch" onclick="goTwitch()">▶ Go Live (Twitch)</button>
       <button class="btn" id="btnGoYoutube" onclick="goYoutube()" style="background:#ff0000;color:#fff">▶ Go Live (YouTube)</button>
+      <button class="btn btn-orange" id="btnUpdateMeta" onclick="updateMeta()">🏷 Update Info</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
+</div>
+<div class="card">
+  <h2>Platform APIs (for setting title/desc)</h2>
+  <div class="form-group">
+    <label>Twitch Client ID</label>
+    <input type="text" name="twitch_client_id" id="twitch_client_id" placeholder="Your Twitch app client ID">
+  </div>
+  <div class="form-group">
+    <label>Twitch OAuth Token</label>
+    <input type="password" name="twitch_token" id="twitch_token" placeholder="oauth:... or ghp_...">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate at <a href="https://twitchtokengenerator.com/" target="_blank" style="color:#58a6ff">twitchtokengenerator.com</a> — scope: <code>channel:manage:broadcast</code></div>
+  </div>
+  <hr style="border:none;border-top:1px solid #30363d;margin:12px 0">
+  <div class="form-group">
+    <label>YouTube Client ID</label>
+    <input type="text" name="youtube_client_id" id="youtube_client_id" placeholder="xxxxxxxxxxxx-xxxxx.apps.googleusercontent.com">
+  </div>
+  <div class="form-group">
+    <label>YouTube Client Secret</label>
+    <input type="password" name="youtube_client_secret" id="youtube_client_secret" placeholder="GOCSPX-...">
+  </div>
+  <div class="form-group">
+    <label>YouTube Refresh Token</label>
+    <input type="password" name="youtube_refresh_token" id="youtube_refresh_token" placeholder="1//0xxxxxxxxx...">
+  </div>
+  <div style="font-size:11px;color:#8b949e;margin-top:2px">YouTube setup: <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#58a6ff">Google Cloud Console</a> → create OAuth 2.0 → add scope <code>youtube</code> → get refresh token</div>
 </div>
 <div class="card">
   <h2>Logs</h2>
@@ -365,6 +475,15 @@ function goYoutube() {
     fetch('/start_youtube').then(r=>r.json()).then(d=>{
       if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoYoutube').disabled = false; }
     }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoYoutube').disabled = false; });
+  });
+}
+function updateMeta() {
+  addLog('Updating stream info...','info');
+  saveConfig(() => {
+    fetch('/update_meta').then(r=>r.json()).then(d=>{
+      const r = d.results || {};
+      for (const [p,s] of Object.entries(r)) addLog(p+': '+s, s==='ok'?'ok':'err');
+    }).catch(e=>addLog('Update failed','err'));
   });
 }
 function stopStream() {
