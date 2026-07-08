@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import os, time, json, requests, threading
 
+_ENV = {}
+
 def load_env():
     env = {}
     try:
@@ -14,7 +16,7 @@ def load_env():
         pass
     return env
 
-_ENV = load_env()
+_ENV.update(load_env())
 
 app = Flask(__name__)
 
@@ -236,6 +238,17 @@ def resolve_source():
             pass
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/upload_env', methods=['POST'])
+def upload_env():
+    file = request.files.get('env_file')
+    if not file:
+        return jsonify({'ok': False, 'error': 'No file uploaded'})
+    file.save('.env')
+    _ENV.clear()
+    _ENV.update(load_env())
+    log('.env file uploaded and loaded')
+    return jsonify({'ok': True, 'msg': 'Uploaded. Reload page to apply.'})
+
 @app.route('/update_meta')
 def update_meta():
     cfg = load_config()
@@ -405,6 +418,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
+      <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
+      <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
@@ -466,6 +481,17 @@ function testSource() {
   fetch('/resolve').then(r=>r.json()).then(d=>{
     el.textContent = d.ok ? '✓ Live — HLS resolved' : '✗ Not live';
   }).catch(()=>el.textContent='✗ Failed');
+}
+function uploadEnv(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('env_file', file);
+  addLog('Uploading .env...','info');
+  fetch('/upload_env', {method:'POST', body:fd})
+    .then(r=>r.json()).then(d=>{
+      addLog(d.ok ? '.env uploaded successfully' : 'Error: '+d.error, d.ok?'ok':'err');
+      if(d.ok) setTimeout(()=>location.reload(), 1500);
+    }).catch(e=>addLog('Upload failed','err'));
 }
 function goLive() {
   document.getElementById('btnGoLive').disabled = true;
