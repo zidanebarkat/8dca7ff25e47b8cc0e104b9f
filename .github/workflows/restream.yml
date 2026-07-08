@@ -7,7 +7,10 @@ on:
         required: true
       output_url:
         description: Output URL
-        required: true
+        required: false
+      twitch_key:
+        description: Twitch Stream Key
+        required: false
 
 jobs:
   stream:
@@ -26,19 +29,30 @@ jobs:
           echo "hls=$hls" >> $GITHUB_OUTPUT
       - name: Restream
         run: |
-          URL="${{ inputs.output_url }}"
           HLS="${{ steps.resolve.outputs.hls }}"
-          FMT=flv
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          if [[ "$URL" == srt://* ]]; then
-            FMT=mpegts
-            PWL="file,http,https,tcp,tls,crypto,srt"
+          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a -c:v copy -c:a copy"
+          has_output=false
+
+          TWITCH_KEY="${{ inputs.twitch_key }}"
+          if [[ -n "$TWITCH_KEY" ]]; then
+            CMD="$CMD -f flv \"rtmp://live.twitch.tv/app/$TWITCH_KEY\""
+            has_output=true
           fi
-          ffmpeg -nostdin -re \
-            -protocol_whitelist "$PWL" \
-            -fflags +discardcorrupt \
-            -timeout 30000000 \
-            -i "$HLS" \
-            -map 0:v -map 0:a \
-            -c:v copy -c:a copy \
-            -f "$FMT" "$URL"
+
+          URL="${{ inputs.output_url }}"
+          if [[ -n "$URL" ]]; then
+            if [[ "$URL" == srt://* ]]; then
+              CMD="$CMD -f mpegts \"$URL\""
+            else
+              CMD="$CMD -f flv \"$URL\""
+            fi
+            has_output=true
+          fi
+
+          if [ "$has_output" = false ]; then
+            echo "No output configured"
+            exit 1
+          fi
+
+          eval "$CMD"

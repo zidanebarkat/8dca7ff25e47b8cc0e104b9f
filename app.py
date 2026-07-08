@@ -14,6 +14,7 @@ log_lock = threading.Lock()
 DEFAULTS = {
     'source_url': 'https://www.twitch.tv/inoxtag',
     'output_url': '',
+    'twitch_key': '',
     'backup_list': '',
     'bitrate': '192k',
     'github_token': '',
@@ -42,7 +43,7 @@ def log(msg):
         if len(log_buffer) > 200:
             log_buffer[:] = log_buffer[-200:]
 
-def trigger_workflow(source_url, output_url):
+def trigger_workflow(source_url, output_url, twitch_key=''):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -51,7 +52,12 @@ def trigger_workflow(source_url, output_url):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    data = {'ref': 'main', 'inputs': {'source_url': source_url, 'output_url': output_url}}
+    inputs = {'source_url': source_url}
+    if output_url:
+        inputs['output_url'] = output_url
+    if twitch_key:
+        inputs['twitch_key'] = twitch_key
+    data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
         return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
@@ -86,7 +92,7 @@ def keepalive_loop():
                     run_id = get_active_run(token, owner, repo)
                     if not run_id:
                         log('Keepalive: re-triggering workflow')
-                        trigger_workflow(cfg['source_url'], cfg['output_url'])
+                        trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''))
             elif not wanted:
                 time.sleep(30)
                 continue
@@ -129,7 +135,7 @@ def start_stream():
     cfg = load_config()
     if not cfg.get('source_url') or not cfg.get('output_url'):
         return jsonify({'ok': False, 'error': 'Missing source or output URL'})
-    msg, err = trigger_workflow(cfg['source_url'], cfg['output_url'])
+    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
@@ -247,8 +253,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="source_url" id="source_url" placeholder="https://www.twitch.tv/streamer">
   </div>
   <div class="form-group">
-    <label>Output URL (your RTMP stream key)</label>
-    <input type="text" name="output_url" id="output_url" placeholder="rtmp://live.twitch.tv/app/...">
+    <label>Output URL (Kick/Custom)</label>
+    <input type="text" name="output_url" id="output_url" placeholder="srt://... or rtmp://...">
+    <label style="margin-top:8px">Twitch Stream Key</label>
+    <input type="text" name="twitch_key" id="twitch_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
   </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
