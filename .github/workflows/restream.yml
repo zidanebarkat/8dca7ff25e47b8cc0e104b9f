@@ -17,12 +17,12 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          pip install -q yt-dlp[default]
+          sudo apt-get install -y -qq ffmpeg build-essential libssl-dev
+          pip install -q yt-dlp curl_cffi
       - name: Get HLS
         id: resolve
         run: |
-          hls=$(yt-dlp -g --socket-timeout 15 "${{ inputs.source_url }}")
+          hls=$(yt-dlp --impersonate chrome -g --socket-timeout 15 "${{ inputs.source_url }}" 2>/dev/null | tail -1)
           echo "hls=$hls" >> $GITHUB_OUTPUT
       - name: Restream
         run: |
