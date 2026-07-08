@@ -18,7 +18,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          pip install -q yt-dlp
+          pip install -q yt-dlp[default]
       - name: Get HLS
         id: resolve
         run: |
