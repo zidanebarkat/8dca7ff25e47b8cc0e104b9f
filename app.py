@@ -133,13 +133,26 @@ def get_status():
 def start_stream():
     global wanted
     cfg = load_config()
-    if not cfg.get('source_url') or not cfg.get('output_url'):
-        return jsonify({'ok': False, 'error': 'Missing source or output URL'})
+    if not cfg.get('source_url') or not (cfg.get('output_url') or cfg.get('twitch_key')):
+        return jsonify({'ok': False, 'error': 'Missing source URL, and no output or Twitch key configured'})
     msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
     log('Workflow triggered')
+    return jsonify({'ok': True, 'msg': msg})
+
+@app.route('/start_twitch')
+def start_twitch():
+    global wanted
+    cfg = load_config()
+    if not cfg.get('source_url') or not cfg.get('twitch_key'):
+        return jsonify({'ok': False, 'error': 'Missing source URL or Twitch key'})
+    msg, err = trigger_workflow(cfg['source_url'], '', cfg.get('twitch_key',''))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    wanted = True
+    log('Twitch-only workflow triggered')
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/stop')
@@ -211,6 +224,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-blue:hover:not(:disabled){background:#388bfd}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover:not(:disabled){background:#30363d}
+.btn-purple{background:#7c3aed;color:#fff}
+.btn-purple:hover:not(:disabled){background:#8b5cf6}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -265,7 +280,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       </label>
     </div>
     <div class="actions">
-      <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live</button>
+      <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (All)</button>
+      <button class="btn btn-purple" id="btnGoTwitch" onclick="goTwitch()">▶ Go Live (Twitch)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
@@ -307,11 +323,20 @@ function testSource() {
 }
 function goLive() {
   document.getElementById('btnGoLive').disabled = true;
-  addLog('Starting...','info');
+  addLog('Starting all outputs...','info');
   saveConfig(() => {
     fetch('/start').then(r=>r.json()).then(d=>{
       if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoLive').disabled = false; }
     }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoLive').disabled = false; });
+  });
+}
+function goTwitch() {
+  document.getElementById('btnGoTwitch').disabled = true;
+  addLog('Starting Twitch only...','info');
+  saveConfig(() => {
+    fetch('/start_twitch').then(r=>r.json()).then(d=>{
+      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoTwitch').disabled = false; }
+    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoTwitch').disabled = false; });
   });
 }
 function stopStream() {
@@ -334,11 +359,13 @@ function updateStatus() {
       dot.className = 'status-dot live';
       txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
       document.getElementById('btnGoLive').disabled = true;
+      document.getElementById('btnGoTwitch').disabled = true;
       document.getElementById('btnStop').disabled = false;
     } else {
       dot.className = 'status-dot stopped';
       txt.textContent = '○ Stopped';
       document.getElementById('btnGoLive').disabled = false;
+      document.getElementById('btnGoTwitch').disabled = false;
       document.getElementById('btnStop').disabled = true;
     }
     if(d.config) document.getElementById('keepalive').checked = d.config.keepalive;
