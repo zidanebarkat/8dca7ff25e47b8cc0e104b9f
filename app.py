@@ -19,7 +19,10 @@ DEFAULTS = {
     'github_token': '',
     'github_owner': '',
     'github_repo': '',
+    'keepalive': False,
 }
+
+wanted = False  # user wants stream to stay on
 
 def load_config():
     try:
@@ -70,6 +73,29 @@ def get_active_run(token, owner, repo):
             return runs[0]['id']
     return None
 
+def keepalive_loop():
+    global wanted
+    while True:
+        try:
+            cfg = load_config()
+            if wanted and cfg.get('keepalive'):
+                token = cfg.get('github_token')
+                owner = cfg.get('github_owner')
+                repo = cfg.get('github_repo')
+                if token and owner and repo:
+                    run_id = get_active_run(token, owner, repo)
+                    if not run_id:
+                        log('Keepalive: re-triggering workflow')
+                        trigger_workflow(cfg['source_url'], cfg['output_url'])
+            elif not wanted:
+                time.sleep(30)
+                continue
+        except Exception as e:
+            log(f'Keepalive error: {e}')
+        time.sleep(60)
+
+threading.Thread(target=keepalive_loop, daemon=True).start()
+
 @app.route('/')
 def index():
     return HTML_PANEL
@@ -95,21 +121,25 @@ def get_status():
     if token and owner and repo:
         run_id = get_active_run(token, owner, repo)
         live = run_id is not None
-    return jsonify({'live': live, 'config': cfg, 'run_id': run_id})
+    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('keepalive', False), 'wanted': wanted})
 
 @app.route('/start')
 def start_stream():
+    global wanted
     cfg = load_config()
     if not cfg.get('source_url') or not cfg.get('output_url'):
         return jsonify({'ok': False, 'error': 'Missing source or output URL'})
     msg, err = trigger_workflow(cfg['source_url'], cfg['output_url'])
     if err:
         return jsonify({'ok': False, 'error': err})
+    wanted = True
     log('Workflow triggered')
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/stop')
 def stop_stream():
+    global wanted
+    wanted = False
     cfg = load_config()
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
@@ -220,13 +250,19 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <label>Output URL (your RTMP stream key)</label>
     <input type="text" name="output_url" id="output_url" placeholder="rtmp://live.twitch.tv/app/...">
   </div>
-  <div class="actions">
-    <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live</button>
-    <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
-    <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
-    <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
-  </div>
-  <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
+    <div class="form-group" style="margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="keepalive" id="keepalive" onchange="saveConfig()" style="width:auto">
+        Keep Alive (auto-restart after 6h)
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live</button>
+      <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
+      <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
+    </div>
+    <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
   <h2>Logs</h2>
@@ -244,7 +280,8 @@ function applyForm(c) {
 function readForm() {
   const d = {};
   document.querySelectorAll('input,textarea,select').forEach(el => {
-    if (el.name) d[el.name] = el.value;
+    if (el.type === 'checkbox') d[el.name] = el.checked;
+    else if (el.name) d[el.name] = el.value;
   });
   return d;
 }
@@ -287,7 +324,7 @@ function updateStatus() {
     const txt = document.getElementById('statusText');
     if(d.live) {
       dot.className = 'status-dot live';
-      txt.textContent = '● LIVE';
+      txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
       document.getElementById('btnGoLive').disabled = true;
       document.getElementById('btnStop').disabled = false;
     } else {
@@ -296,6 +333,7 @@ function updateStatus() {
       document.getElementById('btnGoLive').disabled = false;
       document.getElementById('btnStop').disabled = true;
     }
+    if(d.config) document.getElementById('keepalive').checked = d.config.keepalive;
   }).catch(()=>{});
 }
 function fetchLogs() {
