@@ -1,0 +1,32 @@
+name: Restream
+on:
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: Source URL
+        required: true
+      output_url:
+        description: Output URL
+        required: true
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q yt-dlp
+      - name: Get HLS
+        id: resolve
+        run: |
+          hls=$(yt-dlp -g --socket-timeout 15 "${{ inputs.source_url }}")
+          echo "hls=$hls" >> $GITHUB_OUTPUT
+      - name: Restream
+        run: |
+          ffmpeg -nostdin -re -timeout 30000000 \
+            -i "${{ steps.resolve.outputs.hls }}" \
+            -map 0:v -map 0:a -c:v copy -c:a copy \
+            -f flv "${{ inputs.output_url }}"
