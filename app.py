@@ -1,33 +1,50 @@
 from flask import Flask, request, jsonify
 import os, time, json, requests, threading
 
+def load_env():
+    env = {}
+    try:
+        with open('.env') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    k, _, v = line.partition('=')
+                    env[k.strip()] = v.strip().strip('"').strip("'")
+    except:
+        pass
+    return env
+
+_ENV = load_env()
+
 app = Flask(__name__)
 
-GITHUB_TOKEN = ''
-GITHUB_REPO = ''
-GITHUB_OWNER = ''
+GITHUB_TOKEN = _ENV.get('GITHUB_TOKEN', '')
+GITHUB_REPO = _ENV.get('GITHUB_REPO', '')
+GITHUB_OWNER = _ENV.get('GITHUB_OWNER', '')
 current_run_id = None
 config_path = 'gh_config.json'
 log_buffer = []
 log_lock = threading.Lock()
 
 DEFAULTS = {
-    'source_url': 'https://www.twitch.tv/inoxtag',
-    'output_url': '',
-    'twitch_key': '',
-    'youtube_key': '',
+    'source_url': _ENV.get('SOURCE_URL', 'https://kick.com/soulzeref'),
+    'output_url': _ENV.get('KICK_SRT', ''),
+    'twitch_key': _ENV.get('TWITCH_KEY', ''),
+    'youtube_key': _ENV.get('YT_KEY', ''),
     'stream_title': '',
     'stream_description': '',
-    'twitch_client_id': '',
-    'twitch_token': '',
-    'youtube_client_id': '',
-    'youtube_client_secret': '',
-    'youtube_refresh_token': '',
+    'twitch_client_id': _ENV.get('TWITCH_CLIENT_ID', ''),
+    'twitch_token': _ENV.get('TWITCH_TOKEN', ''),
+    'youtube_client_id': _ENV.get('YT_CLIENT_ID', ''),
+    'youtube_client_secret': _ENV.get('YT_SECRET', ''),
+    'youtube_refresh_token': _ENV.get('YT_REFRESH', ''),
     'backup_list': '',
+    'backup_category': '',
+    'backup_min_viewers': '100',
     'bitrate': '192k',
-    'github_token': '',
-    'github_owner': '',
-    'github_repo': '',
+    'github_token': _ENV.get('GITHUB_TOKEN', ''),
+    'github_owner': _ENV.get('GITHUB_OWNER', ''),
+    'github_repo': _ENV.get('GITHUB_REPO', ''),
     'keepalive': False,
 }
 
