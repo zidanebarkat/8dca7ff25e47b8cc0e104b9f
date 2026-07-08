@@ -7,7 +7,7 @@ GITHUB_TOKEN = ''
 GITHUB_REPO = ''
 GITHUB_OWNER = ''
 current_run_id = None
-config_path = '/tmp/gh_config.json'
+config_path = 'gh_config.json'
 log_buffer = []
 log_lock = threading.Lock()
 
