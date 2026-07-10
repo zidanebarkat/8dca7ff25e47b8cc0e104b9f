@@ -1,58 +1,44 @@
 #!/usr/bin/env python3
-import socket, re, os, sys, time
+import requests, time, os, json
 
-def get_channel(source_url):
-    m = re.search(r'twitch\.tv/(\w+)', source_url)
-    return m.group(1).lower() if m else None
+KICK_CHANNEL = os.environ.get('KICK_CHANNEL', 'zed-bx')
+
+def get_chatroom_id(channel):
+    r = requests.get(f'https://kick.com/api/v2/channels/{channel}', timeout=15,
+                     headers={'User-Agent': 'Mozilla/5.0'})
+    return r.json().get('chatroom', {}).get('id')
 
 def main():
-    source_url = os.environ.get('SOURCE_URL', '')
-    channel = get_channel(source_url)
-    if not channel:
+    chatroom_id = get_chatroom_id(KICK_CHANNEL)
+    if not chatroom_id:
         return
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10)
-    try:
-        sock.connect(('irc.chat.twitch.tv', 6667))
-        sock.sendall(b'NICK justinfan42069\r\n')
-        sock.sendall(b'USER justinfan42069 8 * :justinfan42069\r\n')
-        sock.sendall(f'JOIN #{channel}\r\n'.encode())
-    except Exception:
-        return
-
+    seen = set()
     messages = []
     max_messages = 15
-    sock.settimeout(30)
 
     while True:
         try:
-            data = sock.recv(8192).decode('utf-8', errors='replace')
-            for line in data.split('\r\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith('PING'):
-                    sock.sendall(line.replace('PING', 'PONG').encode() + b'\r\n')
-                    continue
-                m = re.match(r'^:(\w+)!\w+@\w+\.tmi\.twitch\.tv PRIVMSG #\w+ :(.+)$', line)
-                if m:
-                    username = m.group(1)
-                    msg = m.group(2)
-                    if len(msg) > 80:
-                        msg = msg[:77] + '...'
-                    messages.append(f"{username}: {msg}")
+            r = requests.get(f'https://kick.com/api/v2/messages/chat/{chatroom_id}?page=1',
+                             timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+            data = r.json()
+            for msg in data.get('messages', []):
+                mid = msg.get('id')
+                if mid and mid not in seen:
+                    seen.add(mid)
+                    username = msg.get('sender', {}).get('username', '?')
+                    content = msg.get('content', '')
+                    if len(content) > 80:
+                        content = content[:77] + '...'
+                    messages.append(f"{username}: {content}")
                     if len(messages) > max_messages:
                         messages = messages[-max_messages:]
-                    with open('chat.txt', 'w', encoding='utf-8') as f:
-                        f.write('\n'.join(messages))
-        except socket.timeout:
-            try:
-                sock.sendall(b'PONG :tmi.twitch.tv\r\n')
-            except Exception:
-                break
+            if messages:
+                with open('chat.txt', 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(messages))
         except Exception:
-            time.sleep(1)
+            pass
+        time.sleep(5)
 
 if __name__ == '__main__':
     main()

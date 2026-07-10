@@ -94,7 +94,7 @@ jobs:
             curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
             sleep 10
           done) &
-          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" python3 chat_collector.py &
+          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
           VF="scale=1920:1080,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6,drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
           CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
@@ -118,7 +118,7 @@ jobs:
             curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
             sleep 10
           done) &
-          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" python3 chat_collector.py &
+          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
           VF="-vf \"drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6,drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8\""
           CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
