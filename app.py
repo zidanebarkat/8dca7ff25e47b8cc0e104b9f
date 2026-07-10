@@ -578,8 +578,7 @@ def tt_start():
 @app.route('/tiktok/stop')
 def tt_stop():
     global tt_wanted
-tt_wanted = False
-fb_wanted = False
+    tt_wanted = False
     cfg = load_config()
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
