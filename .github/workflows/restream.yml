@@ -77,7 +77,7 @@ jobs:
         if: steps.resolve.outputs.live != 'true'
         run: |
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -c:v libx264 -preset ultrafast -b:v 2500k -c:a aac -shortest -bufsize 5000k -maxrate 2500k -g 60"
+          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf scale=1920:1080 -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
