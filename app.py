@@ -31,19 +31,6 @@ log_lock = threading.Lock()
 DEFAULTS = {
     'source_url': _ENV.get('SOURCE_URL', 'https://kick.com/soulzeref'),
     'output_url': _ENV.get('KICK_SRT', ''),
-    'twitch_key': _ENV.get('TWITCH_KEY', ''),
-    'youtube_key': _ENV.get('YT_KEY', ''),
-    'stream_title': '',
-    'stream_description': '',
-    'twitch_client_id': _ENV.get('TWITCH_CLIENT_ID', ''),
-    'twitch_token': _ENV.get('TWITCH_TOKEN', ''),
-    'youtube_client_id': _ENV.get('YT_CLIENT_ID', ''),
-    'youtube_client_secret': _ENV.get('YT_SECRET', ''),
-    'youtube_refresh_token': _ENV.get('YT_REFRESH', ''),
-    'backup_list': '',
-    'backup_category': '',
-    'backup_min_viewers': '100',
-    'bitrate': '192k',
     'github_token': _ENV.get('GITHUB_TOKEN', ''),
     'github_owner': _ENV.get('GITHUB_OWNER', ''),
     'github_repo': _ENV.get('GITHUB_REPO', ''),
@@ -70,7 +57,7 @@ def log(msg):
         if len(log_buffer) > 200:
             log_buffer[:] = log_buffer[-200:]
 
-def trigger_workflow(source_url, output_url, twitch_key='', youtube_key=''):
+def trigger_workflow(source_url, output_url):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -79,13 +66,7 @@ def trigger_workflow(source_url, output_url, twitch_key='', youtube_key=''):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url}
-    if output_url:
-        inputs['output_url'] = output_url
-    if twitch_key:
-        inputs['twitch_key'] = twitch_key
-    if youtube_key:
-        inputs['youtube_key'] = youtube_key
+    inputs = {'source_url': source_url, 'output_url': output_url}
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -121,7 +102,7 @@ def keepalive_loop():
                     run_id = get_active_run(token, owner, repo)
                     if not run_id:
                         log('Keepalive: re-triggering workflow')
-                        trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''), cfg.get('youtube_key',''))
+                        trigger_workflow(cfg['source_url'], cfg.get('output_url',''))
             elif not wanted:
                 time.sleep(30)
                 continue
@@ -162,39 +143,13 @@ def get_status():
 def start_stream():
     global wanted
     cfg = load_config()
-    if not cfg.get('source_url') or not (cfg.get('output_url') or cfg.get('twitch_key')):
-        return jsonify({'ok': False, 'error': 'Missing source URL, and no output or Twitch key configured'})
-    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''), cfg.get('twitch_key',''), cfg.get('youtube_key',''))
+    if not cfg.get('source_url') or not cfg.get('output_url'):
+        return jsonify({'ok': False, 'error': 'Missing source URL or output URL'})
+    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
     log('Workflow triggered')
-    return jsonify({'ok': True, 'msg': msg})
-
-@app.route('/start_twitch')
-def start_twitch():
-    global wanted
-    cfg = load_config()
-    if not cfg.get('source_url') or not cfg.get('twitch_key'):
-        return jsonify({'ok': False, 'error': 'Missing source URL or Twitch key'})
-    msg, err = trigger_workflow(cfg['source_url'], '', cfg.get('twitch_key',''), '')
-    if err:
-        return jsonify({'ok': False, 'error': err})
-    wanted = True
-    log('Twitch-only workflow triggered')
-    return jsonify({'ok': True, 'msg': msg})
-
-@app.route('/start_youtube')
-def start_youtube():
-    global wanted
-    cfg = load_config()
-    if not cfg.get('source_url') or not cfg.get('youtube_key'):
-        return jsonify({'ok': False, 'error': 'Missing source URL or YouTube key'})
-    msg, err = trigger_workflow(cfg['source_url'], '', '', cfg.get('youtube_key',''))
-    if err:
-        return jsonify({'ok': False, 'error': err})
-    wanted = True
-    log('YouTube-only workflow triggered')
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/stop')
@@ -251,69 +206,7 @@ def upload_env():
 
 @app.route('/update_meta')
 def update_meta():
-    cfg = load_config()
-    title = cfg.get('stream_title', '')
-    desc = cfg.get('stream_description', '')
-    results = {}
-
-    # Twitch
-    tid = cfg.get('twitch_token')
-    cid = cfg.get('twitch_client_id')
-    if tid and cid and title:
-        try:
-            # get broadcaster id
-            r = requests.get('https://api.twitch.tv/helix/users',
-                headers={'Authorization': f'Bearer {tid}', 'Client-Id': cid})
-            if r.status_code == 200:
-                uid = r.json()['data'][0]['id']
-                r2 = requests.patch(f'https://api.twitch.tv/helix/channels?broadcaster_id={uid}',
-                    headers={'Authorization': f'Bearer {tid}', 'Client-Id': cid, 'Content-Type': 'application/json'},
-                    json={'title': title})
-                results['twitch'] = 'ok' if r2.status_code in (200,204) else f'HTTP {r2.status_code}'
-            else:
-                results['twitch'] = f'user fetch failed: {r.status_code}'
-        except Exception as e:
-            results['twitch'] = str(e)
-    else:
-        results['twitch'] = 'skipped (no token/client_id)'
-
-    # YouTube
-    yt_cid = cfg.get('youtube_client_id')
-    yt_secret = cfg.get('youtube_client_secret')
-    yt_refresh = cfg.get('youtube_refresh_token')
-    if yt_cid and yt_secret and yt_refresh and title:
-        try:
-            # refresh token -> access token
-            tr = requests.post('https://oauth2.googleapis.com/token', data={
-                'client_id': yt_cid,
-                'client_secret': yt_secret,
-                'refresh_token': yt_refresh,
-                'grant_type': 'refresh_token',
-            })
-            if tr.status_code == 200:
-                access = tr.json()['access_token']
-                # find active broadcast
-                br = requests.get('https://www.googleapis.com/youtube/v3/liveBroadcasts',
-                    params={'part': 'id,snippet', 'mine': 'true', 'broadcastStatus': 'active'},
-                    headers={'Authorization': f'Bearer {access}'})
-                if br.status_code == 200 and br.json().get('items'):
-                    bid = br.json()['items'][0]['id']
-                    body = {'id': bid, 'snippet': {'title': title, 'description': desc or title}, 'status': {'privacyStatus': 'public'}}
-                    ur = requests.put('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status',
-                        headers={'Authorization': f'Bearer {access}', 'Content-Type': 'application/json'},
-                        json=body)
-                    results['youtube'] = 'ok' if ur.status_code in (200,204) else f'HTTP {ur.status_code}'
-                else:
-                    results['youtube'] = 'no active broadcast' if br.status_code == 200 else f'list failed: {br.status_code}'
-            else:
-                results['youtube'] = f'token refresh failed: {tr.status_code}'
-        except Exception as e:
-            results['youtube'] = str(e)
-    else:
-        results['youtube'] = 'skipped (missing credentials)'
-
-    log(f'Update meta: {results}')
-    return jsonify({'ok': True, 'results': results})
+    return jsonify({'ok': True, 'results': {}})
 
 HTML_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
@@ -397,12 +290,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <textarea name="stream_description" id="stream_description" rows="2" placeholder="Stream description..."></textarea>
   </div>
   <div class="form-group">
-    <label>Output URL (Kick/Custom)</label>
-    <input type="text" name="output_url" id="output_url" placeholder="srt://... or rtmp://...">
-    <label style="margin-top:8px">Twitch Stream Key</label>
-    <input type="text" name="twitch_key" id="twitch_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
-    <label style="margin-top:8px">YouTube Stream Key</label>
-    <input type="text" name="youtube_key" id="youtube_key" placeholder="xxxx-xxxx-xxxx-xxxx">
+    <label>Output URL (Kick RTMP/SRT)</label>
+    <input type="text" name="output_url" id="output_url" placeholder="rtmp://... or srt://...">
   </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -411,10 +300,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       </label>
     </div>
     <div class="actions">
-      <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (All)</button>
-      <button class="btn btn-purple" id="btnGoTwitch" onclick="goTwitch()">▶ Go Live (Twitch)</button>
-      <button class="btn" id="btnGoYoutube" onclick="goYoutube()" style="background:#ff0000;color:#fff">▶ Go Live (YouTube)</button>
-      <button class="btn btn-orange" id="btnUpdateMeta" onclick="updateMeta()">🏷 Update Info</button>
+      <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (Kick)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
@@ -423,32 +309,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
-<div class="card">
-  <h2>Platform APIs (for setting title/desc)</h2>
-  <div class="form-group">
-    <label>Twitch Client ID</label>
-    <input type="text" name="twitch_client_id" id="twitch_client_id" placeholder="Your Twitch app client ID">
-  </div>
-  <div class="form-group">
-    <label>Twitch OAuth Token</label>
-    <input type="password" name="twitch_token" id="twitch_token" placeholder="oauth:... or ghp_...">
-    <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate at <a href="https://twitchtokengenerator.com/" target="_blank" style="color:#58a6ff">twitchtokengenerator.com</a> — scope: <code>channel:manage:broadcast</code></div>
-  </div>
-  <hr style="border:none;border-top:1px solid #30363d;margin:12px 0">
-  <div class="form-group">
-    <label>YouTube Client ID</label>
-    <input type="text" name="youtube_client_id" id="youtube_client_id" placeholder="xxxxxxxxxxxx-xxxxx.apps.googleusercontent.com">
-  </div>
-  <div class="form-group">
-    <label>YouTube Client Secret</label>
-    <input type="password" name="youtube_client_secret" id="youtube_client_secret" placeholder="GOCSPX-...">
-  </div>
-  <div class="form-group">
-    <label>YouTube Refresh Token</label>
-    <input type="password" name="youtube_refresh_token" id="youtube_refresh_token" placeholder="1//0xxxxxxxxx...">
-  </div>
-  <div style="font-size:11px;color:#8b949e;margin-top:2px">YouTube setup: <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#58a6ff">Google Cloud Console</a> → create OAuth 2.0 → add scope <code>youtube</code> → get refresh token</div>
-</div>
+
 <div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
@@ -502,33 +363,7 @@ function goLive() {
     }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoLive').disabled = false; });
   });
 }
-function goTwitch() {
-  document.getElementById('btnGoTwitch').disabled = true;
-  addLog('Starting Twitch only...','info');
-  saveConfig(() => {
-    fetch('/start_twitch').then(r=>r.json()).then(d=>{
-      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoTwitch').disabled = false; }
-    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoTwitch').disabled = false; });
-  });
-}
-function goYoutube() {
-  document.getElementById('btnGoYoutube').disabled = true;
-  addLog('Starting YouTube only...','info');
-  saveConfig(() => {
-    fetch('/start_youtube').then(r=>r.json()).then(d=>{
-      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoYoutube').disabled = false; }
-    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoYoutube').disabled = false; });
-  });
-}
-function updateMeta() {
-  addLog('Updating stream info...','info');
-  saveConfig(() => {
-    fetch('/update_meta').then(r=>r.json()).then(d=>{
-      const r = d.results || {};
-      for (const [p,s] of Object.entries(r)) addLog(p+': '+s, s==='ok'?'ok':'err');
-    }).catch(e=>addLog('Update failed','err'));
-  });
-}
+
 function stopStream() {
   document.getElementById('btnStop').disabled = true;
   addLog('Stopping...','warn');
@@ -549,15 +384,11 @@ function updateStatus() {
       dot.className = 'status-dot live';
       txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
       document.getElementById('btnGoLive').disabled = true;
-      document.getElementById('btnGoTwitch').disabled = true;
-      document.getElementById('btnGoYoutube').disabled = true;
       document.getElementById('btnStop').disabled = false;
     } else {
       dot.className = 'status-dot stopped';
       txt.textContent = '○ Stopped';
       document.getElementById('btnGoLive').disabled = false;
-      document.getElementById('btnGoTwitch').disabled = false;
-      document.getElementById('btnGoYoutube').disabled = false;
       document.getElementById('btnStop').disabled = true;
     }
     if(d.config) document.getElementById('keepalive').checked = d.config.keepalive;

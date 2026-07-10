@@ -6,14 +6,8 @@ on:
         description: Source URL
         required: true
       output_url:
-        description: Output URL
-        required: false
-      twitch_key:
-        description: Twitch Stream Key
-        required: false
-      youtube_key:
-        description: YouTube Stream Key
-        required: false
+        description: Kick RTMP/SRT URL
+        required: true
 
 jobs:
   stream:
@@ -35,33 +29,12 @@ jobs:
           HLS="${{ steps.resolve.outputs.hls }}"
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
           CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a -c:v copy -c:a copy"
-          has_output=false
-
-          TWITCH_KEY="${{ inputs.twitch_key }}"
-          if [[ -n "$TWITCH_KEY" ]]; then
-            CMD="$CMD -f flv \"rtmp://live.twitch.tv/app/$TWITCH_KEY\""
-            has_output=true
-          fi
-
-          YT_KEY="${{ inputs.youtube_key }}"
-          if [[ -n "$YT_KEY" ]]; then
-            CMD="$CMD -f flv \"rtmp://a.rtmp.youtube.com/live2/$YT_KEY\""
-            has_output=true
-          fi
 
           URL="${{ inputs.output_url }}"
-          if [[ -n "$URL" ]]; then
-            if [[ "$URL" == srt://* ]]; then
-              CMD="$CMD -f mpegts \"$URL\""
-            else
-              CMD="$CMD -f flv \"$URL\""
-            fi
-            has_output=true
-          fi
-
-          if [ "$has_output" = false ]; then
-            echo "No output configured"
-            exit 1
+          if [[ "$URL" == srt://* ]]; then
+            CMD="$CMD -f mpegts \"$URL\""
+          else
+            CMD="$CMD -f flv \"$URL\""
           fi
 
           eval "$CMD"
