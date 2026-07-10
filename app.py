@@ -35,9 +35,14 @@ DEFAULTS = {
     'github_owner': _ENV.get('GITHUB_OWNER', ''),
     'github_repo': _ENV.get('GITHUB_REPO', ''),
     'keepalive': False,
+    'yt_url': _ENV.get('YT_URL', 'https://www.twitch.tv/kaicenat'),
+    'yt_key': _ENV.get('YT_KEY', ''),
+    'yt_repo': _ENV.get('YT_REPO', '8dca7ff25e47b8cc0e104b9f-yt'),
+    'yt_keepalive': False,
 }
 
-wanted = False  # user wants stream to stay on
+wanted = False
+yt_wanted = False
 
 def load_config():
     try:
@@ -73,6 +78,22 @@ def trigger_workflow(source_url, output_url):
         return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
     return 'triggered', None
 
+def trigger_yt_workflow(source_url, youtube_key):
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('yt_repo') or '8dca7ff25e47b8cc0e104b9f-yt'
+    if not token or not owner or not repo:
+        return None, 'Missing GitHub config'
+    url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    inputs = {'source_url': source_url, 'youtube_key': youtube_key}
+    data = {'ref': 'main', 'inputs': inputs}
+    r = requests.post(url, json=data, headers=headers)
+    if r.status_code not in (204, 201, 200):
+        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
+    return 'triggered', None
+
 def cancel_workflow(run_id, token, owner, repo):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/cancel'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
@@ -101,7 +122,7 @@ def keepalive_loop():
                 if token and owner and repo:
                     run_id = get_active_run(token, owner, repo)
                     if not run_id:
-                        log('Keepalive: re-triggering workflow')
+                        log('Keepalive: re-triggering Kick workflow')
                         trigger_workflow(cfg['source_url'], cfg.get('output_url',''))
             elif not wanted:
                 time.sleep(30)
@@ -110,7 +131,29 @@ def keepalive_loop():
             log(f'Keepalive error: {e}')
         time.sleep(60)
 
+def yt_keepalive_loop():
+    global yt_wanted
+    while True:
+        try:
+            cfg = load_config()
+            if yt_wanted and cfg.get('yt_keepalive'):
+                token = cfg.get('github_token')
+                owner = cfg.get('github_owner')
+                repo = cfg.get('yt_repo')
+                if token and owner and repo:
+                    run_id = get_active_run(token, owner, repo)
+                    if not run_id:
+                        log('YT Keepalive: re-triggering workflow')
+                        trigger_yt_workflow(cfg['yt_url'], cfg.get('yt_key',''))
+            elif not yt_wanted:
+                time.sleep(30)
+                continue
+        except Exception as e:
+            log(f'YT Keepalive error: {e}')
+        time.sleep(60)
+
 threading.Thread(target=keepalive_loop, daemon=True).start()
+threading.Thread(target=yt_keepalive_loop, daemon=True).start()
 
 @app.route('/')
 def index():
@@ -193,6 +236,26 @@ def resolve_source():
             pass
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/yt/resolve')
+def yt_resolve_source():
+    cfg = load_config()
+    url = cfg.get('yt_url')
+    if not url:
+        return jsonify({'ok': False, 'error': 'No source URL'}), 400
+    import subprocess
+    base = ['yt-dlp', '--socket-timeout', '15']
+    for fmt in [['--format', 'best'], ['--format', 'worst']]:
+        try:
+            r = subprocess.run(base + fmt + ['-g', url],
+                capture_output=True, text=True, timeout=30)
+            if r.returncode == 0:
+                lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
+                if lines:
+                    return jsonify({'ok': True, 'hls': lines[-1], 'source': url})
+        except:
+            pass
+    return jsonify({'ok': False, 'error': 'Not live'}), 400
+
 @app.route('/upload_env', methods=['POST'])
 def upload_env():
     file = request.files.get('env_file')
@@ -207,6 +270,55 @@ def upload_env():
 @app.route('/update_meta')
 def update_meta():
     return jsonify({'ok': True, 'results': {}})
+
+@app.route('/yt')
+def yt_index():
+    return HTML_YT_PANEL
+
+@app.route('/yt/status')
+def yt_status():
+    cfg = load_config()
+    token = cfg.get('github_token')
+    owner = cfg.get('github_owner')
+    repo = cfg.get('yt_repo')
+    live = False
+    run_id = None
+    if token and owner and repo:
+        run_id = get_active_run(token, owner, repo)
+        live = run_id is not None
+    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('yt_keepalive', False), 'wanted': yt_wanted})
+
+@app.route('/yt/start')
+def yt_start():
+    global yt_wanted
+    cfg = load_config()
+    if not cfg.get('yt_url'):
+        return jsonify({'ok': False, 'error': 'Missing source URL'})
+    if not cfg.get('yt_key'):
+        return jsonify({'ok': False, 'error': 'Missing YouTube stream key'})
+    msg, err = trigger_yt_workflow(cfg['yt_url'], cfg.get('yt_key',''))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    yt_wanted = True
+    log('YouTube workflow triggered')
+    return jsonify({'ok': True, 'msg': msg})
+
+@app.route('/yt/stop')
+def yt_stop():
+    global yt_wanted
+    yt_wanted = False
+    cfg = load_config()
+    token = cfg.get('github_token')
+    owner = cfg.get('github_owner')
+    repo = cfg.get('yt_repo')
+    if not token or not owner or not repo:
+        return jsonify({'ok': False, 'error': 'GitHub not configured'})
+    run_id = get_active_run(token, owner, repo)
+    if not run_id:
+        return jsonify({'ok': False, 'error': 'No active run found'})
+    cancel_workflow(run_id, token, owner, repo)
+    log('YouTube workflow cancelled')
+    return jsonify({'ok': True})
 
 HTML_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
@@ -402,6 +514,192 @@ function fetchLogs() {
   }).catch(()=>{});
 }
 fetch('/status').then(r=>r.json()).then(d=>{ if(d.config) applyForm(d.config); });
+setInterval(updateStatus, 3000);
+setInterval(fetchLogs, 2000);
+</script>
+</body>
+</html>'''
+
+HTML_YT_PANEL = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YouTube Stream Panel</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9}
+.container{max-width:900px;margin:0 auto;padding:20px}
+h1{font-size:22px;margin-bottom:20px;color:#fff}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#8b949e;margin-bottom:4px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#58a6ff}
+.form-group textarea{resize:vertical;min-height:60px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover:not(:disabled){background:#2ea043}
+.btn-red{background:#da3633;color:#fff}
+.btn-red:hover:not(:disabled){background:#f85149}
+.btn-blue{background:#1f6feb;color:#fff}
+.btn-blue:hover:not(:disabled){background:#388bfd}
+.btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-grey:hover:not(:disabled){background:#30363d}
+.btn-sm{padding:6px 14px;font-size:13px}
+.actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+.status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.live{background:#3fb950;box-shadow:0 0 8px #3fb950}
+.status-dot.stopped{background:#f85149}
+.log-box{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:12px;height:300px;overflow-y:auto;font-family:monospace;font-size:12px;line-height:1.5;white-space:pre-wrap}
+.log-box .info{color:#8b949e}
+.log-box .err{color:#f85149}
+.log-box .ok{color:#3fb950}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>YouTube Stream Panel</h1>
+<div class="status-bar">
+  <span><span class="status-dot" id="statusDot"></span><span class="status-text" id="statusText">Checking...</span></span>
+</div>
+<div class="card">
+  <h2>GitHub Config</h2>
+  <div class="form-group">
+    <label>GitHub Token</label>
+    <input type="password" name="github_token" id="github_token" placeholder="ghp_...">
+  </div>
+  <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="form-group">
+      <label>Owner</label>
+      <input name="github_owner" id="github_owner" placeholder="your-username">
+    </div>
+    <div class="form-group">
+      <label>YT Repo</label>
+      <input name="yt_repo" id="yt_repo" placeholder="8dca7ff25e47b8cc0e104b9f-yt">
+    </div>
+  </div>
+</div>
+<div class="card">
+  <h2>Stream Config</h2>
+  <div class="form-group">
+    <label>Source URL (Twitch)</label>
+    <input type="url" name="yt_url" id="yt_url" placeholder="https://www.twitch.tv/streamer">
+  </div>
+  <div class="form-group">
+    <label>YouTube Stream Key</label>
+    <input type="text" name="yt_key" id="yt_key" placeholder="xxxx-xxxx-xxxx-xxxx">
+  </div>
+    <div class="form-group" style="margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="yt_keepalive" id="yt_keepalive" onchange="saveConfig()" style="width:auto">
+        Keep Alive (auto-restart after 6h)
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn btn-red" id="btnGoLive" onclick="goLive()" style="background:#ff0000;color:#fff">▶ Go Live (YouTube)</button>
+      <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
+      <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
+      <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
+      <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
+    </div>
+    <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
+</div>
+<div class="card">
+  <h2>Logs</h2>
+  <div class="log-box" id="logBox">Waiting...</div>
+</div>
+</div>
+<script>
+function applyForm(c) {
+  if (!c) return;
+  for (const [k,v] of Object.entries(c)) {
+    const el = document.getElementById(k);
+    if (el) el.value = v;
+  }
+}
+function readForm() {
+  const d = {};
+  document.querySelectorAll('input,textarea,select').forEach(el => {
+    if (el.type === 'checkbox') d[el.name] = el.checked;
+    else if (el.name) d[el.name] = el.value;
+  });
+  return d;
+}
+function saveConfig(cb) {
+  fetch('/config', {method:'POST', body:JSON.stringify(readForm()), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{ addLog('Config saved','ok'); if(cb) cb(); })
+    .catch(e=>{ addLog('Save failed','err'); if(cb) cb(); });
+}
+function testSource() {
+  const el = document.getElementById('testResult');
+  el.textContent = 'Checking...';
+  fetch('/yt/resolve').then(r=>r.json()).then(d=>{
+    el.textContent = d.ok ? '✓ Live — HLS resolved' : '✗ Not live';
+  }).catch(()=>el.textContent='✗ Failed');
+}
+function uploadEnv(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('env_file', file);
+  addLog('Uploading .env...','info');
+  fetch('/upload_env', {method:'POST', body:fd})
+    .then(r=>r.json()).then(d=>{
+      addLog(d.ok ? '.env uploaded successfully' : 'Error: '+d.error, d.ok?'ok':'err');
+      if(d.ok) setTimeout(()=>location.reload(), 1500);
+    }).catch(e=>addLog('Upload failed','err'));
+}
+function goLive() {
+  document.getElementById('btnGoLive').disabled = true;
+  addLog('Starting YouTube stream...','info');
+  saveConfig(() => {
+    fetch('/yt/start').then(r=>r.json()).then(d=>{
+      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoLive').disabled = false; }
+    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoLive').disabled = false; });
+  });
+}
+function stopStream() {
+  document.getElementById('btnStop').disabled = true;
+  addLog('Stopping...','warn');
+  fetch('/yt/stop').then(r=>r.json()).then(d=>{
+    addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
+  }).catch(e=>addLog('Stop failed','err'));
+}
+function addLog(msg,cls='info') {
+  const box = document.getElementById('logBox');
+  box.innerHTML += '<span class="'+cls+'">['+new Date().toLocaleTimeString()+'] '+msg+'</span>\n';
+  box.scrollTop = box.scrollHeight;
+}
+function updateStatus() {
+  fetch('/yt/status').then(r=>r.json()).then(d=>{
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    if(d.live) {
+      dot.className = 'status-dot live';
+      txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
+      document.getElementById('btnGoLive').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+    } else {
+      dot.className = 'status-dot stopped';
+      txt.textContent = '○ Stopped';
+      document.getElementById('btnGoLive').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+    }
+    if(d.config) document.getElementById('yt_keepalive').checked = d.config.yt_keepalive;
+  }).catch(()=>{});
+}
+function fetchLogs() {
+  fetch('/logs').then(r=>r.text()).then(t=>{
+    const box = document.getElementById('logBox');
+    if(t) box.innerHTML = t;
+    box.scrollTop = box.scrollHeight;
+  }).catch(()=>{});
+}
+fetch('/yt/status').then(r=>r.json()).then(d=>{ if(d.config) applyForm(d.config); });
 setInterval(updateStatus, 3000);
 setInterval(fetchLogs, 2000);
 </script>
