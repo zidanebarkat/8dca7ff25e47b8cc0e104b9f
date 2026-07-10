@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-import requests, time, os, json
+import os, time, json
+from curl_cffi import requests
 
 KICK_CHANNEL = os.environ.get('KICK_CHANNEL', 'zed-bx')
+HEADERS = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'}
 
 def get_chatroom_id(channel):
-    r = requests.get(f'https://kick.com/api/v2/channels/{channel}', timeout=15,
-                     headers={'User-Agent': 'Mozilla/5.0'})
+    r = requests.get(f'https://kick.com/api/v2/channels/{channel}',
+                     impersonate='chrome120', headers=HEADERS, timeout=15)
     return r.json().get('chatroom', {}).get('id')
 
 def main():
@@ -20,7 +22,7 @@ def main():
     while True:
         try:
             r = requests.get(f'https://kick.com/api/v2/messages/chat/{chatroom_id}?page=1',
-                             timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+                             impersonate='chrome120', headers=HEADERS, timeout=15)
             data = r.json()
             for msg in data.get('messages', []):
                 mid = msg.get('id')
