@@ -1265,7 +1265,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
   <div class="form-group">
     <label>TikTok Stream Key</label>
-    <input type="text" name="tt_key" id="tt_key" placeholder="TikTok stream key from Live Center">
+    <input type="text" name="tt_key" id="tt_key" placeholder="From livecenter.tiktok.com/producer">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">Get it at <a href="https://livecenter.tiktok.com/producer" target="_blank" style="color:#58a6ff">livecenter.tiktok.com/producer</a> — key expires after 2 hours</div>
   </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
