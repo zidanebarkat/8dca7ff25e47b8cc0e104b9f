@@ -74,7 +74,7 @@ def main():
         for name, paths in browser_paths:
             for path in paths:
                 if os.path.exists(path):
-                    launch_opts['executablePath'] = path
+                    launch_opts['executable_path'] = path
                     print(f"[✓] Using installed {name.capitalize()} browser: {path}")
                     found = True
                     break
