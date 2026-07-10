@@ -43,6 +43,8 @@ DEFAULTS = {
     'twt_key': _ENV.get('TWT_KEY', ''),
     'twt_repo': _ENV.get('TWT_REPO', '8dca7ff25e47b8cc0e104b9f-twt'),
     'twt_keepalive': False,
+    'twt_client_id': _ENV.get('TWT_CLIENT_ID', ''),
+    'twt_token': _ENV.get('TWT_TOKEN', ''),
 }
 
 wanted = False
@@ -412,6 +414,30 @@ def twt_stop():
     log('Twitch workflow cancelled')
     return jsonify({'ok': True})
 
+@app.route('/twitch/fetch_key')
+def twt_fetch_key():
+    cfg = load_config()
+    cid = cfg.get('twt_client_id')
+    token = cfg.get('twt_token')
+    if not cid or not token:
+        return jsonify({'ok': False, 'error': 'Missing Twitch Client ID or OAuth Token'})
+    try:
+        r = requests.get('https://api.twitch.tv/helix/users',
+            headers={'Authorization': f'Bearer {token}', 'Client-Id': cid})
+        if r.status_code != 200:
+            return jsonify({'ok': False, 'error': f'User fetch failed: {r.status_code}'})
+        uid = r.json()['data'][0]['id']
+        r2 = requests.get(f'https://api.twitch.tv/helix/streams/key?broadcaster_id={uid}',
+            headers={'Authorization': f'Bearer {token}', 'Client-Id': cid})
+        if r2.status_code != 200:
+            return jsonify({'ok': False, 'error': f'Key fetch failed: {r2.status_code}'})
+        key = r2.json()['data'][0]['stream_key']
+        cfg['twt_key'] = key
+        save_config(cfg)
+        return jsonify({'ok': True, 'key': key})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
 @app.route('/twitch/resolve')
 def twt_resolve_source():
     cfg = load_config()
@@ -714,6 +740,17 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="twt_url" id="twt_url" placeholder="https://www.twitch.tv/streamer">
   </div>
   <div class="form-group">
+    <label>Twitch Client ID</label>
+    <input type="text" name="twt_client_id" id="twt_client_id" placeholder="Your Twitch app client ID">
+  </div>
+  <div class="form-group">
+    <label>Twitch OAuth Token (scope: channel:read:stream_key)</label>
+    <div style="display:flex;gap:8px">
+      <input type="password" name="twt_token" id="twt_token" placeholder="oauth:... or ghp_..." style="flex:1">
+      <button class="btn btn-grey btn-sm" onclick="fetchTwitchKey()" style="white-space:nowrap">🔑 Fetch Key</button>
+    </div>
+  </div>
+  <div class="form-group">
     <label>Twitch Stream Key</label>
     <input type="text" name="twt_key" id="twt_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
   </div>
@@ -765,6 +802,19 @@ function testSource() {
   fetch('/twitch/resolve').then(r=>r.json()).then(d=>{
     el.textContent = d.ok ? '✓ Live — HLS resolved' : '✗ Not live';
   }).catch(()=>el.textContent='✗ Failed');
+}
+function fetchTwitchKey() {
+  addLog('Fetching Twitch stream key...','info');
+  saveConfig(() => {
+    fetch('/twitch/fetch_key').then(r=>r.json()).then(d=>{
+      if(d.ok) {
+        document.getElementById('twt_key').value = d.key;
+        addLog('Stream key fetched and saved','ok');
+      } else {
+        addLog('Error: '+d.error,'err');
+      }
+    }).catch(e=>addLog('Fetch failed','err'));
+  });
 }
 function uploadEnv(file) {
   if (!file) return;
