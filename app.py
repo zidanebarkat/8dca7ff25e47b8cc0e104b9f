@@ -59,6 +59,7 @@ wanted = False
 yt_wanted = False
 twt_wanted = False
 tt_wanted = False
+fb_wanted = False
 
 def load_config():
     try:
