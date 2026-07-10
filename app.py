@@ -56,6 +56,7 @@ DEFAULTS = {
     'fallback_enabled': False,
     'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
     'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
+    'overlay_text': '',
 }
 
 wanted = False
@@ -96,6 +97,7 @@ def trigger_workflow(source_url, output_url):
         'output_url': output_url,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
+        'overlay_text': cfg.get('overlay_text', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -117,6 +119,7 @@ def trigger_yt_workflow(source_url, youtube_key):
         'youtube_key': youtube_key,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
+        'overlay_text': cfg.get('overlay_text', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -138,6 +141,7 @@ def trigger_twt_workflow(source_url, twitch_key):
         'twitch_key': twitch_key,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
+        'overlay_text': cfg.get('overlay_text', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -159,6 +163,7 @@ def trigger_tt_workflow(source_url, tiktok_key):
         'tiktok_key': tiktok_key,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
+        'overlay_text': cfg.get('overlay_text', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -180,6 +185,7 @@ def trigger_fb_workflow(source_url, facebook_key):
         'facebook_key': facebook_key,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
+        'overlay_text': cfg.get('overlay_text', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -804,6 +810,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <label>Output URL (Kick RTMP/SRT)</label>
     <input type="text" name="output_url" id="output_url" placeholder="rtmp://... or srt://...">
   </div>
+    <div class="form-group">
+      <label>Overlay Text (displayed on stream)</label>
+      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live Now!">
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="keepalive" id="keepalive" onchange="saveConfig()" style="width:auto">
@@ -1045,6 +1055,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <label>Twitch Stream Key</label>
     <input type="text" name="twt_key" id="twt_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
   </div>
+    <div class="form-group">
+      <label>Overlay Text (displayed on stream)</label>
+      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Twitch!">
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="twt_keepalive" id="twt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1284,6 +1298,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <label>YouTube Stream Key</label>
     <input type="text" name="yt_key" id="yt_key" placeholder="xxxx-xxxx-xxxx-xxxx">
   </div>
+    <div class="form-group">
+      <label>Overlay Text (displayed on stream)</label>
+      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on YouTube!">
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="yt_keepalive" id="yt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1519,6 +1537,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       Or run <code style="background:#21262d;padding:1px 4px;border-radius:3px">python tiktok_automation.py</code> locally to auto-fetch
     </div>
   </div>
+    <div class="form-group">
+      <label>Overlay Text (displayed on stream)</label>
+      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on TikTok!">
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="tt_keepalive" id="tt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1748,6 +1770,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="text" name="fb_key" id="fb_key" placeholder="From facebook.com/live/producer">
     <div style="font-size:11px;color:#8b949e;margin-top:2px">Get it at <a href="https://facebook.com/live/producer" target="_blank" style="color:#58a6ff">facebook.com/live/producer</a></div>
   </div>
+    <div class="form-group">
+      <label>Overlay Text (displayed on stream)</label>
+      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Facebook!">
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="fb_keepalive" id="fb_keepalive" onchange="saveConfig()" style="width:auto">

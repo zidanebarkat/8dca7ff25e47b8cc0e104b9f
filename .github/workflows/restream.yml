@@ -23,6 +23,10 @@ on:
           https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Lq2CptklJpFylGJ8xFTGf9Ao6wzrNu6qkZY1wmgb.mp3
           https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/I0x2w0gQdIqJ8WX6qkbn2j7OPWZhJqsncWBvOaf7.mp3
           https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wUFY7RnCiQIfvL3FAlyKRifL7wxYF4LN6Trb6aOh.mp3
+      overlay_text:
+        description: Overlay text on video
+        required: false
+        default: ''
 
 jobs:
   stream:
@@ -75,9 +79,13 @@ jobs:
 
       - name: Fallback restream
         if: steps.resolve.outputs.live != 'true'
+        env:
+          OT: ${{ inputs.overlay_text }}
         run: |
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf scale=1920:1080 -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+          VF="scale=1920:1080"
+          [ -n "$OT" ] && VF="$VF,drawtext=text='$OT':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2"
+          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
@@ -88,10 +96,14 @@ jobs:
 
       - name: Live restream
         if: steps.resolve.outputs.live == 'true'
+        env:
+          OT: ${{ inputs.overlay_text }}
         run: |
           HLS="${{ steps.resolve.outputs.hls }}"
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a -c:v copy -c:a copy"
+          VF=""
+          [ -n "$OT" ] && VF="-vf \"drawtext=text='$OT':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2\""
+          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
