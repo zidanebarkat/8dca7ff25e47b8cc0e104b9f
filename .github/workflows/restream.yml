@@ -57,7 +57,7 @@ jobs:
           while IFS= read -r url; do
             [ -z "$url" ] && continue
             idx=$((idx+1))
-            if curl -L -o "track_${idx}.mp3" "$url" 2>/dev/null && [ -s "track_${idx}.mp3" ]; then
+            if curl -L -o "track_${idx}.mp3" "$url" 2>/dev/null && [ -s "track_${idx}.mp3" ] && ffprobe -i "track_${idx}.mp3" -show_entries format=duration -v quiet -of csv=p=0 >/dev/null 2>&1; then
               :
             else
               yt-dlp --impersonate chrome -o "track_${idx}.%(ext)s" "$url" 2>/dev/null || true
@@ -67,7 +67,7 @@ jobs:
           for rep in $(seq 1 100); do
             for i in $(seq 1 $idx); do
               for f in track_$i.*; do
-                [ -f "$f" ] && echo "file '$f'" >> concat.txt
+                [ -f "$f" ] && ffprobe -i "$f" -show_entries format=duration -v quiet -of csv=p=0 >/dev/null 2>&1 && echo "file '$f'" >> concat.txt
                 break
               done
             done
