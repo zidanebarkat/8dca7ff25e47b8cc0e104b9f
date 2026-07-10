@@ -83,8 +83,12 @@ jobs:
           OT: ${{ inputs.overlay_text }}
         run: |
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          VF="scale=1920:1080"
-          [ -n "$OT" ] && VF="$VF,drawtext=text='$OT':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2"
+          echo "$OT" > overlay.txt
+          (while true; do
+            curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
+            sleep 10
+          done) &
+          VF="scale=1920:1080,drawtext=textfile=overlay.txt:reload=1:fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2"
           CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
@@ -101,8 +105,12 @@ jobs:
         run: |
           HLS="${{ steps.resolve.outputs.hls }}"
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          VF=""
-          [ -n "$OT" ] && VF="-vf \"drawtext=text='$OT':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2\""
+          echo "$OT" > overlay.txt
+          (while true; do
+            curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
+            sleep 10
+          done) &
+          VF="-vf \"drawtext=textfile=overlay.txt:reload=1:fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-th-40:shadowcolor=black:shadowx=2:shadowy=2\""
           CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then

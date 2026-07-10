@@ -324,8 +324,10 @@ threading.Thread(target=fb_keepalive_loop, daemon=True).start()
 def index():
     return HTML_PANEL
 
-@app.route('/config', methods=['POST'])
+@app.route('/config', methods=['GET', 'POST'])
 def update_config():
+    if request.method == 'GET':
+        return jsonify(load_config())
     data = request.get_json(force=True)
     cfg = load_config()
     for k in DEFAULTS:
@@ -812,7 +814,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
-      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live Now!">
+      <div style="display:flex;gap:8px">
+        <input type="text" name="overlay_text" id="overlay_text" placeholder="Live Now!" style="flex:1">
+        <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
+      </div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -912,6 +917,9 @@ function stopStream() {
   fetch('/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function pushOverlay() {
+  saveConfig(() => addLog('Overlay pushed','ok'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
@@ -1057,7 +1065,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
-      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Twitch!">
+      <div style="display:flex;gap:8px">
+        <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Twitch!" style="flex:1">
+        <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
+      </div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -1168,6 +1179,9 @@ function stopStream() {
   fetch('/twitch/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function pushOverlay() {
+  saveConfig(() => addLog('Overlay pushed','ok'));
 }
 function fetchFMAtracks() {
   const url = document.getElementById('fmaUrl').value.trim();
@@ -1300,7 +1314,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
-      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on YouTube!">
+      <div style="display:flex;gap:8px">
+        <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on YouTube!" style="flex:1">
+        <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
+      </div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -1398,6 +1415,9 @@ function stopStream() {
   fetch('/yt/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function pushOverlay() {
+  saveConfig(() => addLog('Overlay pushed','ok'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
@@ -1539,7 +1559,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
-      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on TikTok!">
+      <div style="display:flex;gap:8px">
+        <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on TikTok!" style="flex:1">
+        <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
+      </div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -1641,6 +1664,9 @@ function stopStream() {
   fetch('/tiktok/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function pushOverlay() {
+  saveConfig(() => addLog('Overlay pushed','ok'));
 }
 function fetchFMAtracks() {
   const url = document.getElementById('fmaUrl').value.trim();
@@ -1772,7 +1798,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
-      <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Facebook!">
+      <div style="display:flex;gap:8px">
+        <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Facebook!" style="flex:1">
+        <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
+      </div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -1870,6 +1899,9 @@ function stopStream() {
   fetch('/facebook/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function pushOverlay() {
+  saveConfig(() => addLog('Overlay pushed','ok'));
 }
 function fetchFMAtracks() {
   const url = document.getElementById('fmaUrl').value.trim();
