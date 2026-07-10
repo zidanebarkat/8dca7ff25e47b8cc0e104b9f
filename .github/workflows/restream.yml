@@ -8,6 +8,21 @@ on:
       output_url:
         description: Kick RTMP/SRT URL
         required: true
+      fallback_video:
+        description: Fallback Video URL
+        required: false
+        default: 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'
+      fallback_playlist:
+        description: Fallback Music Playlist
+        required: false
+        default: |-
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/3CujPNW3YlSqNkWQSgsgysHBl1YPOXRsqBTX2gh0.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/hMRyjksozJqHXKTqLJLjhV9dVMNMywBPJIGhzEFh.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Lq2CptklJpFylGJ8xFTGf9Ao6wzrNu6qkZY1wmgb.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/I0x2w0gQdIqJ8WX6qkbn2j7OPWZhJqsncWBvOaf7.mp3
+          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wUFY7RnCiQIfvL3FAlyKRifL7wxYF4LN6Trb6aOh.mp3
 
 jobs:
   stream:
@@ -19,22 +34,68 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg build-essential libssl-dev
           pip install -q yt-dlp curl_cffi
-      - name: Get HLS
+
+      - name: Try resolve source HLS
         id: resolve
         run: |
-          hls=$(yt-dlp --impersonate chrome -g --socket-timeout 15 "${{ inputs.source_url }}" 2>/dev/null | tail -1)
-          echo "hls=$hls" >> $GITHUB_OUTPUT
-      - name: Restream
-        run: |
-          HLS="${{ steps.resolve.outputs.hls }}"
-          PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
-          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a -c:v copy -c:a copy"
+          hls=$(yt-dlp --impersonate chrome -g --socket-timeout 15 "${{ inputs.source_url }}" 2>/dev/null | tail -1) || true
+          if [ -z "$hls" ]; then
+            echo "live=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "hls=$hls" >> "$GITHUB_OUTPUT"
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          fi
 
+      - name: Prepare fallback assets
+        if: steps.resolve.outputs.live != 'true'
+        env:
+          PLAYLIST: ${{ inputs.fallback_playlist }}
+        run: |
+          curl -L -o brb.mp4 "${{ inputs.fallback_video }}"
+          echo "$PLAYLIST" > playlist_urls.txt
+          idx=0
+          while IFS= read -r url; do
+            [ -z "$url" ] && continue
+            idx=$((idx+1))
+            if curl -L -o "track_${idx}.mp3" "$url" 2>/dev/null && [ -s "track_${idx}.mp3" ]; then
+              :
+            else
+              yt-dlp --impersonate chrome -o "track_${idx}.%(ext)s" "$url" 2>/dev/null || true
+            fi
+          done < playlist_urls.txt
+          > concat.txt
+          for rep in $(seq 1 100); do
+            for i in $(seq 1 $idx); do
+              for f in track_$i.*; do
+                [ -f "$f" ] && echo "file '$f'" >> concat.txt
+                break
+              done
+            done
+          done
+
+      - name: Fallback restream
+        if: steps.resolve.outputs.live != 'true'
+        run: |
+          PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
+          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -c:v libx264 -preset ultrafast -b:v 2500k -c:a aac -shortest -bufsize 5000k -maxrate 2500k -g 60"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
           else
             CMD="$CMD -f flv \"$URL\""
           fi
+          eval "$CMD"
 
+      - name: Live restream
+        if: steps.resolve.outputs.live == 'true'
+        run: |
+          HLS="${{ steps.resolve.outputs.hls }}"
+          PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
+          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a -c:v copy -c:a copy"
+          URL="${{ inputs.output_url }}"
+          if [[ "$URL" == srt://* ]]; then
+            CMD="$CMD -f mpegts \"$URL\""
+          else
+            CMD="$CMD -f flv \"$URL\""
+          fi
           eval "$CMD"

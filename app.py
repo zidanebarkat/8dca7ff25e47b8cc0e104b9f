@@ -55,7 +55,7 @@ DEFAULTS = {
     'fb_keepalive': False,
     'fallback_enabled': False,
     'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
-    'fallback_audio': _ENV.get('FALLBACK_AUDIO', ''),
+    'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
 }
 
 wanted = False
@@ -91,7 +91,12 @@ def trigger_workflow(source_url, output_url):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url, 'output_url': output_url}
+    inputs = {
+        'source_url': source_url,
+        'output_url': output_url,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
+    }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -107,7 +112,12 @@ def trigger_yt_workflow(source_url, youtube_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url, 'youtube_key': youtube_key}
+    inputs = {
+        'source_url': source_url,
+        'youtube_key': youtube_key,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
+    }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -123,7 +133,12 @@ def trigger_twt_workflow(source_url, twitch_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url, 'twitch_key': twitch_key}
+    inputs = {
+        'source_url': source_url,
+        'twitch_key': twitch_key,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
+    }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -139,7 +154,12 @@ def trigger_tt_workflow(source_url, tiktok_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url, 'tiktok_key': tiktok_key}
+    inputs = {
+        'source_url': source_url,
+        'tiktok_key': tiktok_key,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
+    }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -155,7 +175,12 @@ def trigger_fb_workflow(source_url, facebook_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'source_url': source_url, 'facebook_key': facebook_key}
+    inputs = {
+        'source_url': source_url,
+        'facebook_key': facebook_key,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
+    }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
@@ -657,6 +682,24 @@ def fb_resolve_source():
         return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/fma_parse', methods=['POST'])
+def fma_parse():
+    data = request.get_json(force=True)
+    url = data.get('url', '').strip()
+    if not url or 'freemusicarchive.org' not in url:
+        return jsonify({'ok': False, 'error': 'Not a valid FMA URL'})
+    try:
+        r = requests.get(url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+        if r.status_code != 200:
+            return jsonify({'ok': False, 'error': f'HTTP {r.status_code}'})
+        import re
+        urls = re.findall(r'"fileUrl":"(https://files\.freemusicarchive\.org[^"]+)"', r.text)
+        if not urls:
+            return jsonify({'ok': False, 'error': 'No tracks found on that page'})
+        return jsonify({'ok': True, 'tracks': urls, 'count': len(urls)})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
 @app.route('/tiktok/push_key', methods=['POST'])
 def tt_push_key():
     data = request.get_json(force=True)
@@ -790,8 +833,12 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
   </div>
   <div class="form-group">
-    <label>Background Music URL (optional)</label>
-    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
+    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
+    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
   </div>
 </div>
 
@@ -860,6 +907,18 @@ function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
   box.innerHTML += '<span class="'+cls+'">['+new Date().toLocaleTimeString()+'] '+msg+'</span>\n';
   box.scrollTop = box.scrollHeight;
+}
+function fetchFMAtracks() {
+  const url = document.getElementById('fmaUrl').value.trim();
+  if (!url) { addLog('Enter an FMA album URL first','err'); return; }
+  addLog('Fetching tracks from FMA...','info');
+  fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{
+      if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
+      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
+      addLog('Loaded '+d.count+' tracks from FMA','ok');
+      saveConfig();
+    }).catch(e=>addLog('Fetch failed','err'));
 }
 function updateStatus() {
   fetch('/status').then(r=>r.json()).then(d=>{
@@ -1015,8 +1074,12 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
   </div>
   <div class="form-group">
-    <label>Background Music URL (optional)</label>
-    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
+    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
+    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
   </div>
 </div>
 <div class="card">
@@ -1091,6 +1154,18 @@ function stopStream() {
   fetch('/twitch/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function fetchFMAtracks() {
+  const url = document.getElementById('fmaUrl').value.trim();
+  if (!url) { addLog('Enter an FMA album URL first','err'); return; }
+  addLog('Fetching tracks from FMA...','info');
+  fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{
+      if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
+      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
+      addLog('Loaded '+d.count+' tracks from FMA','ok');
+      saveConfig();
+    }).catch(e=>addLog('Fetch failed','err'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
@@ -1238,8 +1313,12 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
   </div>
   <div class="form-group">
-    <label>Background Music URL (optional)</label>
-    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
+    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
+    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
   </div>
 </div>
 <div class="card">
@@ -1306,6 +1385,18 @@ function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
   box.innerHTML += '<span class="'+cls+'">['+new Date().toLocaleTimeString()+'] '+msg+'</span>\n';
   box.scrollTop = box.scrollHeight;
+}
+function fetchFMAtracks() {
+  const url = document.getElementById('fmaUrl').value.trim();
+  if (!url) { addLog('Enter an FMA album URL first','err'); return; }
+  addLog('Fetching tracks from FMA...','info');
+  fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{
+      if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
+      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
+      addLog('Loaded '+d.count+' tracks from FMA','ok');
+      saveConfig();
+    }).catch(e=>addLog('Fetch failed','err'));
 }
 function updateStatus() {
   fetch('/yt/status').then(r=>r.json()).then(d=>{
@@ -1457,8 +1548,12 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
   </div>
   <div class="form-group">
-    <label>Background Music URL (optional)</label>
-    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
+    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
+    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
   </div>
 </div>
 <div class="card">
@@ -1524,6 +1619,18 @@ function stopStream() {
   fetch('/tiktok/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function fetchFMAtracks() {
+  const url = document.getElementById('fmaUrl').value.trim();
+  if (!url) { addLog('Enter an FMA album URL first','err'); return; }
+  addLog('Fetching tracks from FMA...','info');
+  fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{
+      if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
+      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
+      addLog('Loaded '+d.count+' tracks from FMA','ok');
+      saveConfig();
+    }).catch(e=>addLog('Fetch failed','err'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
@@ -1670,8 +1777,12 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
   </div>
   <div class="form-group">
-    <label>Background Music URL (optional)</label>
-    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
+    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
+    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
   </div>
 </div>
 <div class="card">
@@ -1733,6 +1844,18 @@ function stopStream() {
   fetch('/facebook/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function fetchFMAtracks() {
+  const url = document.getElementById('fmaUrl').value.trim();
+  if (!url) { addLog('Enter an FMA album URL first','err'); return; }
+  addLog('Fetching tracks from FMA...','info');
+  fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
+    .then(r=>r.json()).then(d=>{
+      if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
+      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
+      addLog('Loaded '+d.count+' tracks from FMA','ok');
+      saveConfig();
+    }).catch(e=>addLog('Fetch failed','err'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
