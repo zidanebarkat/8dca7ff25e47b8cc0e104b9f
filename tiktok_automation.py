@@ -65,16 +65,22 @@ def main():
                 '--disable-features=IsolateOrigins,site-per-process',
             ],
         }
-        chrome_paths = [
-            '/usr/bin/google-chrome',
-            '/usr/bin/chromium-browser',
-            '/usr/bin/chromium',
-            '/snap/bin/chromium',
+        browser_paths = [
+            ('chrome', ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable']),
+            ('chromium', ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/snap/bin/chromium']),
+            ('brave', ['/usr/bin/brave-browser', '/snap/bin/brave', '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser']),
         ]
-        if any(os.path.exists(path) for path in chrome_paths):
-            launch_opts['channel'] = 'chrome'
-            print("[✓] Using installed Chrome browser")
-        else:
+        found = False
+        for name, paths in browser_paths:
+            for path in paths:
+                if os.path.exists(path):
+                    launch_opts['executablePath'] = path
+                    print(f"[✓] Using installed {name.capitalize()} browser: {path}")
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
             print("[.] Using Playwright Chromium")
 
         browser = p.chromium.launch(**launch_opts)
