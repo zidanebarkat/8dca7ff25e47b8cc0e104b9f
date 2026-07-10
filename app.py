@@ -682,6 +682,18 @@ def fb_resolve_source():
             pass
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/tiktok/push_key', methods=['POST'])
+def tt_push_key():
+    data = request.get_json(force=True)
+    key = data.get('key', '').strip()
+    if not key:
+        return jsonify({'ok': False, 'error': 'No key provided'})
+    cfg = load_config()
+    cfg['tt_key'] = key
+    save_config(cfg)
+    log(f'TikTok key pushed via script')
+    return jsonify({'ok': True})
+
 HTML_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1381,8 +1393,14 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
   <div class="form-group">
     <label>TikTok Stream Key</label>
-    <input type="text" name="tt_key" id="tt_key" placeholder="From livecenter.tiktok.com/producer">
-    <div style="font-size:11px;color:#8b949e;margin-top:2px">Get it at <a href="https://livecenter.tiktok.com/producer" target="_blank" style="color:#58a6ff">livecenter.tiktok.com/producer</a> — key expires after 2 hours</div>
+    <div style="display:flex;gap:8px">
+      <input type="text" name="tt_key" id="tt_key" placeholder="From livecenter.tiktok.com/producer" style="flex:1">
+      <button class="btn btn-grey btn-sm" onclick="fetchTikTokKey()" style="white-space:nowrap">🤖 Auto-Fetch</button>
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">
+      Get key manually at <a href="https://livecenter.tiktok.com/producer" target="_blank" style="color:#58a6ff">livecenter.tiktok.com/producer</a> — key expires after 2 hours<br>
+      Or run <code style="background:#21262d;padding:1px 4px;border-radius:3px">python tiktok_automation.py</code> locally to auto-fetch
+    </div>
   </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -1432,6 +1450,10 @@ function testSource() {
   fetch('/tiktok/resolve').then(r=>r.json()).then(d=>{
     el.textContent = d.ok ? '✓ Live — HLS resolved' : '✗ Not live';
   }).catch(()=>el.textContent='✗ Failed');
+}
+function fetchTikTokKey() {
+  addLog('Opening instruction...','info');
+  alert('Run this on your LOCAL computer:\n\n1. pip install playwright\n2. playwright install chromium\n3. python tiktok_automation.py\n\nIt will open a browser, let you log into TikTok, and auto-fetch the stream key.\n\nThe key will be sent to this panel automatically.');
 }
 function uploadEnv(file) {
   if (!file) return;
