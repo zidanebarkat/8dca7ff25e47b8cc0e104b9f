@@ -478,6 +478,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 </head>
 <body>
 <div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px">
+  <a href="/" style="padding:8px 16px;background:#238636;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
+</div>
 <h1>📡 Stream Panel</h1>
 <div class="status-bar">
   <span><span class="status-dot" id="statusDot"></span><span class="status-text" id="statusText">Checking...</span></span>
@@ -676,6 +681,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 </head>
 <body>
 <div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px">
+  <a href="/" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#7c3aed;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Twitch</a>
+</div>
 <h1>Twitch Stream Panel</h1>
 <div class="status-bar">
   <span><span class="status-dot" id="statusDot"></span><span class="status-text" id="statusText">Checking...</span></span>
@@ -862,6 +872,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 </head>
 <body>
 <div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px">
+  <a href="/" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#ff0000;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
+</div>
 <h1>YouTube Stream Panel</h1>
 <div class="status-bar">
   <span><span class="status-dot" id="statusDot"></span><span class="status-text" id="statusText">Checking...</span></span>
