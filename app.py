@@ -53,6 +53,9 @@ DEFAULTS = {
     'fb_key': _ENV.get('FB_KEY', ''),
     'fb_repo': _ENV.get('FB_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_keepalive': False,
+    'fallback_enabled': False,
+    'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
+    'fallback_audio': _ENV.get('FALLBACK_AUDIO', ''),
 }
 
 wanted = False
@@ -348,31 +351,7 @@ def get_logs():
     with log_lock:
         return '\n'.join(log_buffer[-100:]), 200, {'Content-Type': 'text/plain'}
 
-@app.route('/resolve')
-def resolve_source():
-    cfg = load_config()
-    if not cfg.get('source_url'):
-        return jsonify({'ok': False, 'error': 'No source URL'}), 400
-    import subprocess
-    base = ['yt-dlp', '--socket-timeout', '15']
-    for fmt in [['--format', 'best'], ['--format', 'worst']]:
-        try:
-            r = subprocess.run(base + fmt + ['-g', cfg['source_url']],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
-                lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
-                if lines:
-                    return jsonify({'ok': True, 'hls': lines[-1], 'source': cfg['source_url']})
-        except:
-            pass
-    return jsonify({'ok': False, 'error': 'Not live'}), 400
-
-@app.route('/yt/resolve')
-def yt_resolve_source():
-    cfg = load_config()
-    url = cfg.get('yt_url')
-    if not url:
-        return jsonify({'ok': False, 'error': 'No source URL'}), 400
+def do_resolve(url, cfg):
     import subprocess
     base = ['yt-dlp', '--socket-timeout', '15']
     for fmt in [['--format', 'best'], ['--format', 'worst']]:
@@ -382,9 +361,32 @@ def yt_resolve_source():
             if r.returncode == 0:
                 lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
                 if lines:
-                    return jsonify({'ok': True, 'hls': lines[-1], 'source': url})
+                    return lines[-1], False
         except:
             pass
+    if cfg.get('fallback_enabled') and cfg.get('fallback_video'):
+        return cfg['fallback_video'], True
+    return None, False
+
+@app.route('/resolve')
+def resolve_source():
+    cfg = load_config()
+    if not cfg.get('source_url'):
+        return jsonify({'ok': False, 'error': 'No source URL'}), 400
+    hls, fallback = do_resolve(cfg['source_url'], cfg)
+    if hls:
+        return jsonify({'ok': True, 'hls': hls, 'source': cfg['source_url'], 'fallback': fallback})
+    return jsonify({'ok': False, 'error': 'Not live'}), 400
+
+@app.route('/yt/resolve')
+def yt_resolve_source():
+    cfg = load_config()
+    url = cfg.get('yt_url')
+    if not url:
+        return jsonify({'ok': False, 'error': 'No source URL'}), 400
+    hls, fallback = do_resolve(url, cfg)
+    if hls:
+        return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
 @app.route('/upload_env', methods=['POST'])
@@ -530,18 +532,9 @@ def twt_resolve_source():
     url = cfg.get('twt_url')
     if not url:
         return jsonify({'ok': False, 'error': 'No source URL'}), 400
-    import subprocess
-    base = ['yt-dlp', '--socket-timeout', '15']
-    for fmt in [['--format', 'best'], ['--format', 'worst']]:
-        try:
-            r = subprocess.run(base + fmt + ['-g', url],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
-                lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
-                if lines:
-                    return jsonify({'ok': True, 'hls': lines[-1], 'source': url})
-        except:
-            pass
+    hls, fallback = do_resolve(url, cfg)
+    if hls:
+        return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
 @app.route('/tiktok')
@@ -599,18 +592,9 @@ def tt_resolve_source():
     url = cfg.get('tt_url')
     if not url:
         return jsonify({'ok': False, 'error': 'No source URL'}), 400
-    import subprocess
-    base = ['yt-dlp', '--socket-timeout', '15']
-    for fmt in [['--format', 'best'], ['--format', 'worst']]:
-        try:
-            r = subprocess.run(base + fmt + ['-g', url],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
-                lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
-                if lines:
-                    return jsonify({'ok': True, 'hls': lines[-1], 'source': url})
-        except:
-            pass
+    hls, fallback = do_resolve(url, cfg)
+    if hls:
+        return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
 @app.route('/facebook')
@@ -668,18 +652,9 @@ def fb_resolve_source():
     url = cfg.get('fb_url')
     if not url:
         return jsonify({'ok': False, 'error': 'No source URL'}), 400
-    import subprocess
-    base = ['yt-dlp', '--socket-timeout', '15']
-    for fmt in [['--format', 'best'], ['--format', 'worst']]:
-        try:
-            r = subprocess.run(base + fmt + ['-g', url],
-                capture_output=True, text=True, timeout=30)
-            if r.returncode == 0:
-                lines = [l.strip() for l in r.stdout.strip().split('\n') if l.strip()]
-                if lines:
-                    return jsonify({'ok': True, 'hls': lines[-1], 'source': url})
-        except:
-            pass
+    hls, fallback = do_resolve(url, cfg)
+    if hls:
+        return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
 @app.route('/tiktok/push_key', methods=['POST'])
@@ -801,6 +776,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
+</div>
+<div class="card">
+  <h2>Fallback (when source is offline)</h2>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
+      Enable fallback background
+    </label>
+  </div>
+  <div class="form-group">
+    <label>Background Video URL</label>
+    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
+  </div>
+  <div class="form-group">
+    <label>Background Music URL (optional)</label>
+    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+  </div>
 </div>
 
 <div class="card">
@@ -1011,6 +1003,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
+  <h2>Fallback (when source is offline)</h2>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
+      Enable fallback background
+    </label>
+  </div>
+  <div class="form-group">
+    <label>Background Video URL</label>
+    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
+  </div>
+  <div class="form-group">
+    <label>Background Music URL (optional)</label>
+    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+  </div>
+</div>
+<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -1217,6 +1226,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
+  <h2>Fallback (when source is offline)</h2>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
+      Enable fallback background
+    </label>
+  </div>
+  <div class="form-group">
+    <label>Background Video URL</label>
+    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
+  </div>
+  <div class="form-group">
+    <label>Background Music URL (optional)</label>
+    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+  </div>
+</div>
+<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -1419,6 +1445,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
+  <h2>Fallback (when source is offline)</h2>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
+      Enable fallback background
+    </label>
+  </div>
+  <div class="form-group">
+    <label>Background Video URL</label>
+    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
+  </div>
+  <div class="form-group">
+    <label>Background Music URL (optional)</label>
+    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+  </div>
+</div>
+<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -1613,6 +1656,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
+</div>
+<div class="card">
+  <h2>Fallback (when source is offline)</h2>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
+      Enable fallback background
+    </label>
+  </div>
+  <div class="form-group">
+    <label>Background Video URL</label>
+    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
+  </div>
+  <div class="form-group">
+    <label>Background Music URL (optional)</label>
+    <input type="url" name="fallback_audio" id="fallback_audio" placeholder="https://cdn.pixabay.com/audio/...">
+  </div>
 </div>
 <div class="card">
   <h2>Logs</h2>
