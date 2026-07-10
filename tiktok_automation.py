@@ -17,7 +17,7 @@ the key will be pushed to the panel automatically.
 If run without arguments, just prints the key to the console.
 """
 
-import os, json, sys
+import os, json, sys, subprocess
 from pathlib import Path
 
 COOKIE_FILE = 'tiktok_cookies.json'
@@ -56,12 +56,42 @@ def load_cookies(context):
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        launch_opts = {
+            'headless': False,
+            'args': [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+            ],
+        }
+        chrome_paths = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+            '/snap/bin/chromium',
+        ]
+        if any(os.path.exists(path) for path in chrome_paths):
+            launch_opts['channel'] = 'chrome'
+            print("[✓] Using installed Chrome browser")
+        else:
+            print("[.] Using Playwright Chromium")
+
+        browser = p.chromium.launch(**launch_opts)
         context = browser.new_context(
             viewport={'width': 1280, 'height': 900},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            locale='en-US',
+            timezone_id='America/New_York',
         )
         page = context.new_page()
+
+        # Remove webdriver detection
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        """)
 
         has_cookies = load_cookies(context)
 
