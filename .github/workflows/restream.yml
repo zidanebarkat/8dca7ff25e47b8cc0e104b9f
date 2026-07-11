@@ -126,9 +126,6 @@ jobs:
         run: |
           mkfifo /tmp/chat_overlay.fifo
           FLAGS="--channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
-          if [[ "$PREVIEW" == "true" ]]; then
-            FLAGS="$FLAGS --simulate"
-          fi
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             echo "chat=fallback" >> "$GITHUB_ENV"
           else
