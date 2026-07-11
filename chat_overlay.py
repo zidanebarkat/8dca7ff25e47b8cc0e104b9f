@@ -430,8 +430,8 @@ if __name__ == '__main__':
                 pass
 
         if not chatroom_id:
-            log('chat_overlay: could not resolve chatroom_id, exiting')
-            sys.exit(1)
+            log('chat_overlay: could not resolve chatroom_id, falling back to simulate mode')
+            args.simulate = True
         log(f'chat_overlay: resolved chatroom_id={chatroom_id}')
 
     log('chat_overlay: starting')
