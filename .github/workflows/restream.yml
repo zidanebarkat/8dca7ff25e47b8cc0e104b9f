@@ -139,7 +139,7 @@ jobs:
           CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]scale=400:-1[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
-            CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f x11grab -framerate 30 -video_size 800x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+            CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           else
             VF="scale=1920:1080,$BEVELED,$CHAT"
             CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
@@ -172,7 +172,7 @@ jobs:
           CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             VF="[0:v]$BEVELED[main];[2:v]scale=400:-1[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
-            CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f x11grab -framerate 30 -video_size 800x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
+            CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           else
             VF="-vf \"$BEVELED,$CHAT\""
             CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
