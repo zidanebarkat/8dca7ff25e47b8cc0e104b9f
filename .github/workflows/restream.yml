@@ -95,8 +95,8 @@ jobs:
           sleep 2
           fluxbox -display :99 &
           sleep 1
-          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --kiosk --disable-dev-shm-usage "${{ inputs.browser_overlay_url }}" &
-          sleep 4
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --app="${{ inputs.browser_overlay_url }}" &
+          sleep 8
           echo "browser=ready" >> "$GITHUB_ENV"
 
       - name: Schedule self-reboot (before 6h limit)
