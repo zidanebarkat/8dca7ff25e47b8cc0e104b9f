@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import os, time, json, requests, threading
+import os, time, json, requests, threading, subprocess
 
 _ENV = {}
 
@@ -743,6 +743,99 @@ def fb_resolve_source():
 def chat_index():
     return HTML_CHAT_PANEL
 
+PREVIEW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview_output')
+os.makedirs(PREVIEW_DIR, exist_ok=True)
+
+def generate_preview():
+    cfg = load_config()
+    ot = cfg.get('overlay_text', 'Stream Preview') or 'Stream Preview'
+    font = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+    if not os.path.exists(font):
+        font = ''
+    out_path = os.path.join(PREVIEW_DIR, 'preview.mp4')
+    tmp_bg = os.path.join(PREVIEW_DIR, 'bg.mp4')
+    tmp_chat = os.path.join(PREVIEW_DIR, 'sim_chat.mp4')
+    tmp_ot = os.path.join(PREVIEW_DIR, 'overlay.txt')
+    with open(tmp_ot, 'w') as f:
+        f.write(ot)
+    try:
+        dur = 10
+        subprocess.run([
+            'ffmpeg', '-f', 'lavfi', '-i', f'color=c=blue:s=1920x1080:d={dur}:r=30',
+            '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono',
+            '-shortest', '-y', tmp_bg
+        ], capture_output=True, timeout=30)
+        subprocess.run([
+            'ffmpeg', '-f', 'lavfi', '-i', f'color=c=green:s=400x600:d={dur}:r=30',
+            '-vf', "drawtext=text='Chat preview':fontsize=24:fontcolor=white:x=10:y=h-80:box=1:boxcolor=black@0.5:boxborderw=6,drawtext=text='User: testing overlay':fontsize=24:fontcolor=white:x=10:y=h-50:box=1:boxcolor=black@0.5:boxborderw=6",
+            '-y', tmp_chat
+        ], capture_output=True, timeout=30)
+        beveled = f"drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
+        vf = f"[0:v]scale=1920:1080,{beveled}[main];[1:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
+        subprocess.run([
+            'ffmpeg', '-nostdin', '-re', '-stream_loop', '-1', '-i', tmp_bg,
+            '-i', tmp_chat,
+            '-filter_complex', vf, '-map', '[out]', '-map', '0:a',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '2000k',
+            '-c:a', 'aac', '-b:a', '96k', '-t', str(dur), '-y', out_path
+        ], capture_output=True, timeout=60)
+        for f in [tmp_bg, tmp_chat, tmp_ot]:
+            try: os.remove(f)
+            except: pass
+        return out_path
+    except Exception as e:
+        return None
+
+@app.route('/preview')
+def preview_page():
+    out = generate_preview()
+    if out and os.path.exists(out):
+        return PREVIEW_HTML.replace('%VIDEO_URL%', '/preview_video')
+    else:
+        return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Unavailable</h1><p>FFmpeg not available on this server. Trigger the <b>Test Overlay</b> workflow on GitHub instead.</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+
+@app.route('/preview_video')
+def preview_video():
+    p = os.path.join(PREVIEW_DIR, 'preview.mp4')
+    if os.path.exists(p):
+        return open(p, 'rb').read(), 200, {'Content-Type': 'video/mp4'}
+    return 'Not found', 404
+
+PREVIEW_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stream Preview</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.container{text-align:center;padding:20px;max-width:1000px}
+h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
+video{width:100%;max-width:960px;border-radius:8px;border:1px solid #30363d;margin-bottom:20px}
+.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover{background:#2ea043}
+.btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-grey:hover{background:#30363d}
+.note{font-size:13px;color:#8b949e;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Stream Preview</h1>
+<p style="margin-bottom:16px;color:#8b949e;font-size:14px">This is what your stream output will look like (simulated)</p>
+<video src="%VIDEO_URL%" controls autoplay muted loop></video>
+<div class="actions">
+  <a class="btn btn-green" href="/start" onclick="event.preventDefault();fetch('/start').then(r=>r.json()).then(d=>{if(d.ok)location.href='/';else alert(d.error)})">▶ Looks good, Go Live!</a>
+  <a class="btn btn-grey" href="/">← Back to panel</a>
+</div>
+<div class="note">Chat messages shown are simulated. Real chat will show live from your channel.</div>
+</div>
+</body>
+</html>'''
+
 @app.route('/fma_parse', methods=['POST'])
 def fma_parse():
     data = request.get_json(force=True)
@@ -888,6 +981,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-green" id="btnGoLive" onclick="goLive()">▶ Go Live (Kick)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-orange btn-sm" onclick="location.href='/preview'">👁 Preview</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
       <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
@@ -1064,6 +1158,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-blue:hover:not(:disabled){background:#388bfd}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover:not(:disabled){background:#30363d}
+.btn-orange{background:#d29922;color:#fff}
+.btn-orange:hover:not(:disabled){background:#e3b341}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -1150,6 +1246,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-purple" id="btnGoLive" onclick="goLive()">▶ Go Live (Twitch)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-orange btn-sm" onclick="location.href='/preview'">👁 Preview</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
       <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
@@ -1330,6 +1427,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-blue:hover:not(:disabled){background:#388bfd}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover:not(:disabled){background:#30363d}
+.btn-orange{background:#d29922;color:#fff}
+.btn-orange:hover:not(:disabled){background:#e3b341}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -1405,6 +1504,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-red" id="btnGoLive" onclick="goLive()" style="background:#ff0000;color:#fff">▶ Go Live (YouTube)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-orange btn-sm" onclick="location.href='/preview'">👁 Preview</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
       <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
@@ -1574,6 +1674,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-blue:hover:not(:disabled){background:#388bfd}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover:not(:disabled){background:#30363d}
+.btn-orange{background:#d29922;color:#fff}
+.btn-orange:hover:not(:disabled){background:#e3b341}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -1656,6 +1758,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-pink" id="btnGoLive" onclick="goLive()">▶ Go Live (TikTok)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-blue btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-orange btn-sm" onclick="location.href='/preview'">👁 Preview</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
       <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
@@ -1825,6 +1928,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 .btn-red:hover:not(:disabled){background:#f85149}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover:not(:disabled){background:#30363d}
+.btn-orange{background:#d29922;color:#fff}
+.btn-orange:hover:not(:disabled){background:#e3b341}
 .btn-sm{padding:6px 14px;font-size:13px}
 .actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
 .status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
@@ -1844,7 +1949,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
-  <a href="/facebook" style="padding:8px 16px;background:#1877f2;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Facebook</a>
+  <a href="/facebook" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Facebook</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Facebook Stream Panel</h1>
@@ -1901,6 +2006,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <button class="btn btn-blue" id="btnGoLive" onclick="goLive()">▶ Go Live (Facebook)</button>
       <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
       <button class="btn btn-grey btn-sm" onclick="saveConfig()">💾 Save</button>
+      <button class="btn btn-orange btn-sm" onclick="location.href='/preview'">👁 Preview</button>
       <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
       <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
       <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
