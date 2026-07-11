@@ -851,7 +851,12 @@ def preview_restart():
     existing = get_active_preview_run(token, owner, repo)
     if existing:
         cancel_workflow(existing, token, owner, repo)
-    return redirect('/preview')
+    msg, run_id, err = trigger_workflow(cfg.get('source_url',''), cfg.get('output_url',''), preview=True)
+    if err:
+        return f'<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Error</h1><p>{err}</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    with open('preview_run_id.txt', 'w') as f:
+        f.write(str(run_id or ''))
+    return redirect(f'/preview_status_page?run_id={run_id}&owner={owner}&repo={repo}')
 
 PREVIEW_HTML = r'''<!DOCTYPE html>
 <html lang="en">
