@@ -192,7 +192,11 @@ jobs:
           else
             CMD="$CMD -f flv \"$URL\""
           fi
-          eval "$CMD"
+          while true; do
+            eval "$CMD" || true
+            echo "Restream died, restarting in 10s..."
+            sleep 10
+          done
 
       - name: Live restream (preview)
         if: steps.resolve.outputs.live == 'true' && inputs.preview == 'true'
@@ -239,4 +243,8 @@ jobs:
           else
             CMD="$CMD -f flv \"$URL\""
           fi
-          eval "$CMD"
+          while true; do
+            eval "$CMD" || true
+            echo "Restream died, restarting in 10s..."
+            sleep 10
+          done
