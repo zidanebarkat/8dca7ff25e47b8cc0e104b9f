@@ -1,0 +1,58 @@
+name: Test Overlay (no streaming)
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/apt
+          key: ${{ runner.os }}-apt-overlay
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            ffmpeg xvfb chromium-browser x11-xserver-utils fonts-dejavu-core
+
+      - name: Create test background video
+        run: |
+          ffmpeg -f lavfi -i "color=c=blue:s=1920x1080:d=30:r=30" \
+            -f lavfi -i "anullsrc=r=44100:cl=mono" \
+            -vf "drawtext=text='TEST BACKGROUND':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2" \
+            -shortest -y brb.mp4
+          echo "file $PWD/brb.mp4" > concat.txt
+          echo "Test Overlay" > overlay.txt
+
+      - name: Start overlay stack
+        run: |
+          python3 -m http.server --directory "${{ github.workspace }}" 9999 &
+          sleep 1
+          Xvfb :99 -screen 0 400x600x24 &
+          sleep 2
+          xsetroot -display :99 -solid "#00ff00"
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu \
+            --disable-extensions --disable-dev-shm-usage --no-first-run \
+            --window-size=400,600 --window-position=0,0 \
+            --app="http://127.0.0.1:9999/chat_overlay.html?channel=zed-bx" &
+          sleep 8
+
+      - name: Capture test output
+        run: |
+          FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+          BEVELED="drawtext=textfile=$PWD/overlay.txt:reload=1:fontfile=$FONT:fontsize=54:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=$PWD/overlay.txt:reload=1:fontfile=$FONT:fontsize=54:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=$PWD/overlay.txt:reload=1:fontfile=$FONT:fontsize=54:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=$PWD/overlay.txt:reload=1:fontfile=$FONT:fontsize=54:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
+          VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
+          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 \
+            -f concat -safe 0 -i concat.txt \
+            -f x11grab -framerate 30 -video_size 400x600 -i :99.0 \
+            -filter_complex "$VF" -map '[out]' -map 1:a \
+            -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k \
+            -t 20 -y test_output.mp4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: overlay-test
+          path: test_output.mp4
