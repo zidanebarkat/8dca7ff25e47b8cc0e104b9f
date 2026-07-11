@@ -131,14 +131,19 @@ def trigger_workflow(source_url, output_url, preview=False):
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
         return None, None, f'GitHub API error: {r.status_code} {r.text[:200]}'
-    # Get the run ID from the workflow runs list
-    runs_url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/runs?per_page=1&event=workflow_dispatch'
-    r2 = requests.get(runs_url, headers=headers)
     run_id = None
-    if r2.status_code == 200:
-        runs = r2.json().get('workflow_runs', [])
-        if runs:
-            run_id = runs[0]['id']
+    if preview:
+        for _ in range(15):
+            time.sleep(1)
+            runs_url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/runs?per_page=5&event=workflow_dispatch'
+            r2 = requests.get(runs_url, headers=headers)
+            if r2.status_code == 200:
+                for run in r2.json().get('workflow_runs', []):
+                    if run['status'] in ('in_progress', 'queued', 'pending'):
+                        run_id = run['id']
+                        break
+            if run_id:
+                break
     return 'triggered', run_id, None
 
 def trigger_yt_workflow(source_url, youtube_key):
@@ -911,28 +916,46 @@ const OWNER = '%OWNER%';
 const REPO = '%REPO%';
 
 let goLiveClicked = false;
+let staleRetries = 0;
 async function poll() {
   if (goLiveClicked) return;
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
   try {
     const r = await fetch(`/preview/status?run_id=${RUN_ID}&owner=${OWNER}&repo=${REPO}`);
     const d = await r.json();
     if (!d.ok) {
+      if (elapsed < 20) {
+        document.getElementById('statusText').textContent = 'Waiting for workflow to appear... (' + elapsed + 's)';
+        setTimeout(poll, 2000);
+        return;
+      }
       document.getElementById('statusText').textContent = 'Error: ' + (d.error||'unknown');
       document.getElementById('spinner').style.display = 'none';
       return;
     }
     if (d.done) {
+      if (elapsed < 20 && staleRetries < 5) {
+        staleRetries++;
+        document.getElementById('statusText').textContent = 'Starting... (' + elapsed + 's)';
+        setTimeout(poll, 2000);
+        return;
+      }
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('actions').style.display = 'flex';
       document.getElementById('statusText').className = 'status-text stopped';
       document.getElementById('statusText').textContent = 'Preview stopped';
       return;
     }
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    staleRetries = 0;
     let status = d.status || 'running';
     document.getElementById('statusText').textContent = status.charAt(0).toUpperCase() + status.slice(1) + '... (' + elapsed + 's)';
     setTimeout(poll, 5000);
   } catch(e) {
+    if (elapsed < 20) {
+      document.getElementById('statusText').textContent = 'Waiting for workflow... (' + elapsed + 's)';
+      setTimeout(poll, 2000);
+      return;
+    }
     document.getElementById('statusText').textContent = 'Connection error, retrying...';
     setTimeout(poll, 5000);
   }
