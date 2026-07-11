@@ -25,7 +25,17 @@ parser.add_argument('--height', type=int, default=600)
 parser.add_argument('--fps', type=int, default=5)
 parser.add_argument('--max-messages', type=int, default=20)
 parser.add_argument('--panel-url', default='', help='Panel URL to POST preview frames to')
+parser.add_argument('--log-file', default='', help='Log file path for debug output')
 args = parser.parse_args()
+
+if args.log_file:
+    log_fh = open(args.log_file, 'a', buffering=1)
+    def log(msg):
+        print(msg, file=log_fh, flush=True)
+        print(msg, file=sys.stderr, flush=True)
+else:
+    def log(msg):
+        print(msg, file=sys.stderr, flush=True)
 
 WIDTH, HEIGHT = args.width, args.height
 FPS = args.fps
@@ -293,7 +303,7 @@ def pusher_thread_func(chatroom_id):
         ws.settimeout(60)
         ws.connect(PUSHER_URL, origin='https://kick.com')
     except Exception as e:
-        print(f'chat_overlay: pusher connect error: {e}', file=sys.stderr, flush=True)
+        log(f'chat_overlay: pusher connect error: {e}')
         running = False
         return
 
@@ -304,7 +314,7 @@ def pusher_thread_func(chatroom_id):
         try:
             raw = ws.recv()
         except Exception as e:
-            print(f'chat_overlay: pusher recv error: {e}', file=sys.stderr, flush=True)
+            log(f'chat_overlay: pusher recv error: {e}')
             time.sleep(3)
             continue
         if not raw:
@@ -353,9 +363,9 @@ def render_loop():
     fifo_path = args.fifo
     if not os.path.exists(fifo_path):
         os.mkfifo(fifo_path)
-    print(f'chat_overlay: waiting for reader on {fifo_path}...', file=sys.stderr, flush=True)
+    log(f'chat_overlay: waiting for reader on {fifo_path}...')
     fifo_fh = open(fifo_path, 'wb')
-    print(f'chat_overlay: fifo reader connected, starting render at {FPS}fps', file=sys.stderr, flush=True)
+    log(f'chat_overlay: fifo reader connected, starting render at {FPS}fps')
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     frame_interval = 1.0 / FPS
@@ -363,13 +373,22 @@ def render_loop():
     panel_url = args.panel_url.rstrip('/')
     while running:
         t0 = time.monotonic()
-        frame = render_frame(list(messages), draw, FONT, FONT_SM, FONT_USER)
+        try:
+            frame = render_frame(list(messages), draw, FONT, FONT_SM, FONT_USER)
+        except Exception as e:
+            log(f'chat_overlay: render_frame error: {e}')
+            import traceback
+            log(traceback.format_exc())
+            frame = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
         raw = frame.tobytes()
         try:
             fifo_fh.write(raw)
             fifo_fh.flush()
         except BrokenPipeError:
-            print('chat_overlay: pipe broken, exiting', file=sys.stderr, flush=True)
+            log('chat_overlay: pipe broken, exiting')
+            break
+        except Exception as e:
+            log(f'chat_overlay: fifo write error: {e}')
             break
         frame_count += 1
         if panel_url and frame_count % (FPS * 5) == 0:
@@ -379,7 +398,11 @@ def render_loop():
                 buf.seek(0)
                 r = requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
                 if r.status_code != 200:
-                    print(f'chat_overlay: frame upload returned {r.status_code}', file=sys.stderr, flush=True)
+                    log(f'chat_overlay: frame upload returned {r.status_code}')
+                elif frame_count == FPS * 5:
+                    log(f'chat_overlay: first frame uploaded OK')
+            except Exception as e:
+                log(f'chat_overlay: frame upload error: {e}')
             except Exception as e:
                 print(f'chat_overlay: frame upload error: {e}', file=sys.stderr, flush=True)
         elapsed = time.monotonic() - t0
@@ -410,7 +433,7 @@ if __name__ == '__main__':
             else:
                 print(f'chat_overlay: API returned {r.status_code}, using fallback resolution', file=sys.stderr, flush=True)
         except Exception as e:
-            print(f'chat_overlay: API error: {e}, using fallback resolution', file=sys.stderr, flush=True)
+            log(f'chat_overlay: API error: {e}, using fallback resolution')
 
         if not chatroom_id:
             try:
@@ -422,11 +445,11 @@ if __name__ == '__main__':
                 pass
 
         if not chatroom_id:
-            print('chat_overlay: could not resolve chatroom_id, exiting', file=sys.stderr, flush=True)
+            log('chat_overlay: could not resolve chatroom_id, exiting')
             sys.exit(1)
-        print(f'chat_overlay: resolved chatroom_id={chatroom_id}', file=sys.stderr, flush=True)
+        log(f'chat_overlay: resolved chatroom_id={chatroom_id}')
 
-    print('chat_overlay: starting', file=sys.stderr, flush=True)
+    log('chat_overlay: starting')
     t_pusher = None
     if args.simulate:
         t_pusher = threading.Thread(target=simulate_messages, daemon=True)
@@ -436,4 +459,4 @@ if __name__ == '__main__':
         t_pusher.start()
 
     render_loop()
-    print('chat_overlay: exited cleanly', file=sys.stderr, flush=True)
+    log('chat_overlay: exited cleanly')
