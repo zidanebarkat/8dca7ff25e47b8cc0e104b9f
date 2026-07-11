@@ -28,6 +28,19 @@ config_path = 'gh_config.json'
 log_buffer = []
 log_lock = threading.Lock()
 
+def init_wanted():
+    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted
+    try:
+        with open(config_path) as f:
+            c = json.load(f)
+            wanted = c.get('kick_wanted', False)
+            yt_wanted = c.get('yt_wanted', False)
+            twt_wanted = c.get('twt_wanted', False)
+            tt_wanted = c.get('tt_wanted', False)
+            fb_wanted = c.get('fb_wanted', False)
+    except:
+        pass
+
 DEFAULTS = {
     'source_url': _ENV.get('SOURCE_URL', 'https://kick.com/soulzeref'),
     'output_url': _ENV.get('KICK_SRT', ''),
@@ -58,6 +71,11 @@ DEFAULTS = {
     'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
     'overlay_text': '',
     'browser_overlay_url': '',
+    'kick_wanted': False,
+    'yt_wanted': False,
+    'twt_wanted': False,
+    'tt_wanted': False,
+    'fb_wanted': False,
 }
 
 wanted = False
@@ -74,6 +92,12 @@ def load_config():
         return dict(DEFAULTS)
 
 def save_config(cfg):
+    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted
+    cfg['kick_wanted'] = wanted
+    cfg['yt_wanted'] = yt_wanted
+    cfg['twt_wanted'] = twt_wanted
+    cfg['tt_wanted'] = tt_wanted
+    cfg['fb_wanted'] = fb_wanted
     with open(config_path, 'w') as f:
         json.dump(cfg, f)
 
@@ -100,6 +124,7 @@ def trigger_workflow(source_url, output_url):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -123,6 +148,7 @@ def trigger_yt_workflow(source_url, youtube_key):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -137,6 +163,10 @@ def trigger_twt_workflow(source_url, twitch_key):
     repo = cfg.get('twt_repo') or '8dca7ff25e47b8cc0e104b9f-twt'
     if not token or not owner or not repo:
         return None, 'Missing GitHub config'
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('twt_repo') or '8dca7ff25e47b8cc0e104b9f-twt'
+    if not token or not owner or not repo:
+        return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     inputs = {
@@ -146,6 +176,7 @@ def trigger_twt_workflow(source_url, twitch_key):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -169,6 +200,7 @@ def trigger_tt_workflow(source_url, tiktok_key):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -192,6 +224,7 @@ def trigger_fb_workflow(source_url, facebook_key):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -365,6 +398,7 @@ def start_stream():
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
+    save_config(cfg)
     log('Workflow triggered')
     return jsonify({'ok': True, 'msg': msg})
 
@@ -373,6 +407,7 @@ def stop_stream():
     global wanted
     wanted = False
     cfg = load_config()
+    save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
     repo = cfg.get('github_repo')
@@ -473,6 +508,7 @@ def yt_start():
         return jsonify({'ok': False, 'error': err})
     yt_wanted = True
     log('YouTube workflow triggered')
+    save_config(cfg)
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/yt/stop')
@@ -480,6 +516,7 @@ def yt_stop():
     global yt_wanted
     yt_wanted = False
     cfg = load_config()
+    save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
     repo = cfg.get('yt_repo')
@@ -522,6 +559,7 @@ def twt_start():
         return jsonify({'ok': False, 'error': err})
     twt_wanted = True
     log('Twitch workflow triggered')
+    save_config(cfg)
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/twitch/stop')
@@ -529,6 +567,7 @@ def twt_stop():
     global twt_wanted
     twt_wanted = False
     cfg = load_config()
+    save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
     repo = cfg.get('twt_repo')
@@ -606,6 +645,7 @@ def tt_start():
         return jsonify({'ok': False, 'error': err})
     tt_wanted = True
     log('TikTok workflow triggered')
+    save_config(cfg)
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/tiktok/stop')
@@ -613,6 +653,7 @@ def tt_stop():
     global tt_wanted
     tt_wanted = False
     cfg = load_config()
+    save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
     repo = cfg.get('tt_repo')
@@ -666,6 +707,7 @@ def fb_start():
         return jsonify({'ok': False, 'error': err})
     fb_wanted = True
     log('Facebook workflow triggered')
+    save_config(cfg)
     return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/facebook/stop')
@@ -673,6 +715,7 @@ def fb_stop():
     global fb_wanted
     fb_wanted = False
     cfg = load_config()
+    save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
     repo = cfg.get('fb_repo')
@@ -2210,4 +2253,5 @@ function resetForm() {
 </html>'''
 
 if __name__ == '__main__':
+    init_wanted()
     app.run(host='0.0.0.0', port=8080, debug=False)
