@@ -95,11 +95,11 @@ jobs:
       - name: Start browser overlay
         if: inputs.browser_overlay_url != ''
         run: |
-          Xvfb :99 -screen 0 800x600x24 &
+          Xvfb :99 -screen 0 400x600x24 &
           sleep 2
           fluxbox -display :99 &
           sleep 1
-          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --app="${{ inputs.browser_overlay_url }}" &
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --window-size=400,600 --app="${{ inputs.browser_overlay_url }}" &
           sleep 8
           echo "browser=ready" >> "$GITHUB_ENV"
 
