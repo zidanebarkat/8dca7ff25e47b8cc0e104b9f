@@ -31,6 +31,10 @@ on:
         description: Browser overlay URL (chat, alerts, etc.)
         required: false
         default: ''
+      github_token:
+        description: GitHub PAT for self-trigger
+        required: false
+        default: ''
 
 jobs:
   stream:
