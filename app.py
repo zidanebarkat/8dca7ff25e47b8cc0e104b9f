@@ -961,12 +961,17 @@ function uploadEnv(file) {
     }).catch(e=>addLog('Upload failed','err'));
 }
 function goLive() {
-  document.getElementById('btnGoLive').disabled = true;
+  const btn = document.getElementById('btnGoLive');
+  if (btn.dataset.running === 'true') return;
+  btn.dataset.running = 'true';
+  btn.disabled = true;
   addLog('Starting all outputs...','info');
   saveConfig(() => {
     fetch('/start').then(r=>r.json()).then(d=>{
-      if(!d.ok) { addLog('Error: '+d.error,'err'); document.getElementById('btnGoLive').disabled = false; }
-    }).catch(e=>{ addLog('Start failed','err'); document.getElementById('btnGoLive').disabled = false; });
+      if(!d.ok) addLog('Error: '+d.error,'err');
+      btn.dataset.running = 'false';
+      btn.disabled = false;
+    }).catch(e=>{ addLog('Start failed','err'); }).finally(()=>{ btn.dataset.running = 'false'; btn.disabled = false; });
   });
 }
 
