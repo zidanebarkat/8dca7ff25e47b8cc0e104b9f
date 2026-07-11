@@ -102,35 +102,27 @@ jobs:
       - name: Start browser overlay
         if: inputs.browser_overlay_url != ''
         run: |
-          cat > /tmp/overlay.html << 'ENDOFFILE'
+          cat > /tmp/overlay.html << 'EOF'
           <!DOCTYPE html>
           <html>
-          <head>
-          <style>
-          body{margin:0;background:#00ff00;overflow:hidden;width:400px;height:600px}
-          iframe{width:400px;height:600px;border:none}
-          </style>
-          </head>
+          <head><style>body{margin:0;background:#00ff00;overflow:hidden;width:400px;height:600px}iframe{width:400px;height:600px;border:none}</style></head>
           <body>
-          <iframe id="f" src="THE_URL_PLACEHOLDER"></iframe>
+          <iframe id="f" src="TURL"></iframe>
           <script>
-          var f=document.getElementById('f');
-          f.onload=function(){
-            try{
-              var s=f.contentDocument.createElement('style');
-              s.textContent='html,body{background:#00ff00!important;min-height:100%}';
-              f.contentDocument.head.appendChild(s);
-            }catch(e){}
+          document.getElementById('f').onload=function(){
+            try{var s=this.contentDocument.createElement('style');s.textContent='html,body{background:#00ff00!important;min-height:100%}';this.contentDocument.head.appendChild(s)}catch(e){}
           };
           </script>
           </body>
           </html>
-          ENDOFFILE
-          sed -i "s|THE_URL_PLACEHOLDER|${{ inputs.browser_overlay_url }}|g" /tmp/overlay.html
+          EOF
+          python3 -c "import sys; open('/tmp/overlay.html','w').write(open('/tmp/overlay.html').read().replace('          TURL',sys.argv[1]))" "${{ inputs.browser_overlay_url }}"
+          python3 -m http.server --directory /tmp 9999 &
+          sleep 1
           Xvfb :99 -screen 0 400x600x24 &
           sleep 2
           xsetroot -display :99 -solid "#00ff00"
-          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --disable-web-security --disable-features=IsolateOrigins,site-per-process --user-data-dir=/tmp/chrome-overlay --kiosk "file:///tmp/overlay.html" &
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --disable-web-security --disable-features=IsolateOrigins,site-per-process --user-data-dir=/tmp/chrome-overlay --kiosk "http://127.0.0.1:9999/overlay.html" &
           sleep 8
           echo "browser=ready" >> "$GITHUB_ENV"
 
