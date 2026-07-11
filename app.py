@@ -760,9 +760,16 @@ def preview_page():
     repo = cfg.get('github_repo') or GITHUB_REPO
     if not token or not owner or not repo:
         return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Unavailable</h1><p>Configure GitHub credentials first.</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    # Cancel any existing preview first
+    existing = get_active_preview_run(token, owner, repo)
+    if existing:
+        cancel_workflow(existing, token, owner, repo)
     msg, run_id, err = trigger_workflow(cfg.get('source_url',''), cfg.get('output_url',''), preview=True)
     if err:
         return f'<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Error</h1><p>{err}</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    # Save preview run_id
+    with open('preview_run_id.txt', 'w') as f:
+        f.write(str(run_id or ''))
     return PREVIEW_HTML.replace('%RUN_ID%', str(run_id or '')).replace('%OWNER%', owner).replace('%REPO%', repo)
 
 @app.route('/preview/status')
@@ -779,24 +786,52 @@ def preview_status():
     if r.status_code != 200:
         return jsonify({'ok': False, 'error': f'API error: {r.status_code}'})
     data = r.json()
-    conclusion = data.get('conclusion')
-    status = data.get('status')
-    done = status == 'completed'
-    artifact_url = None
-    if done and conclusion == 'success':
-        ar = requests.get(f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', headers=headers)
-        if ar.status_code == 200:
-            arts = ar.json().get('artifacts', [])
-            if arts:
-                artifact_url = f'https://api.github.com/repos/{owner}/{repo}/actions/artifacts/{arts[0]["id"]}/zip'
     return jsonify({
         'ok': True,
-        'status': status,
-        'conclusion': conclusion,
-        'done': done,
-        'artifact_url': artifact_url,
+        'status': data.get('status'),
+        'conclusion': data.get('conclusion'),
+        'done': data.get('status') == 'completed',
         'html_url': data.get('html_url', ''),
     })
+
+@app.route('/preview/go_live')
+def preview_go_live():
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('github_repo') or GITHUB_REPO
+    if not token or not owner or not repo:
+        return jsonify({'ok': False, 'error': 'Missing GitHub config'})
+    # Cancel preview run
+    try:
+        with open('preview_run_id.txt') as f:
+            prev_run_id = f.read().strip()
+        if prev_run_id:
+            cancel_workflow(int(prev_run_id), token, owner, repo)
+    except:
+        pass
+    # Also cancel any other active preview runs
+    existing = get_active_preview_run(token, owner, repo)
+    if existing:
+        cancel_workflow(existing, token, owner, repo)
+    # Now trigger real Go Live
+    msg, run_id, err = trigger_workflow(cfg.get('source_url',''), cfg.get('output_url',''))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    global wanted
+    wanted = True
+    save_config(cfg)
+    return jsonify({'ok': True, 'msg': msg})
+
+def get_active_preview_run(token, owner, repo):
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/runs?per_page=5&event=workflow_dispatch'
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        for run in r.json().get('workflow_runs', []):
+            if run['status'] in ('in_progress', 'queued', 'pending'):
+                return run['id']
+    return None
 
 PREVIEW_HTML = r'''<!DOCTYPE html>
 <html lang="en">
@@ -807,15 +842,14 @@ PREVIEW_HTML = r'''<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.container{text-align:center;padding:20px;max-width:700px}
+.container{text-align:center;padding:20px;max-width:600px}
 h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
 .status-box{padding:30px;background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:20px}
 .spinner{border:3px solid #30363d;border-top:3px solid #58a6ff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 .status-text{font-size:15px;color:#8b949e;margin-top:12px}
 .status-text.running{color:#58a6ff}
-.status-text.success{color:#3fb950}
-.status-text.failed{color:#f85149}
+.status-text.stopped{color:#f85149}
 .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none}
 .btn-green{background:#238636;color:#fff}
@@ -825,59 +859,89 @@ h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover{background:#30363d}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.note{font-size:13px;color:#8b949e;margin-top:16px}
+.note{font-size:13px;color:#8b949e;margin-top:16px;line-height:1.5}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Stream Preview</h1>
+<h1>🔍 Stream Preview</h1>
 <div class="status-box" id="mainBox">
   <div class="spinner" id="spinner"></div>
-  <div class="status-text running" id="statusText">Starting preview workflow on GitHub...</div>
+  <div class="status-text running" id="statusText">Starting preview on GitHub...</div>
 </div>
 <div class="actions" id="actions" style="display:none">
-  <a class="btn btn-green" id="btnDownload" href="#" download>⬇ Download Preview</a>
-  <a class="btn btn-red" id="btnGoLive" href="/start" onclick="event.preventDefault();fetch('/start').then(r=>r.json()).then(d=>{if(d.ok)location.href='/';else alert(d.error)})">▶ Looks good, Go Live!</a>
+  <button class="btn btn-red" id="btnGoLive" onclick="goLive()">▶ Looks good, Go Live!</button>
   <a class="btn btn-grey" href="/">← Back to panel</a>
 </div>
-<div class="note" id="note" style="display:none">30-second preview generated using your current config (overlay text, browser overlay, etc.)</div>
+<div class="note" id="note">
+  Preview runs the full pipeline (Xvfb + Chromium + overlays) on GitHub.<br>
+  It outputs to /dev/null — same setup as a real stream, just no destination.<br>
+  Click <b>Go Live</b> when ready — preview stops and real stream starts.
+</div>
 </div>
 <script>
 const RUN_ID = '%RUN_ID%';
 const OWNER = '%OWNER%';
 const REPO = '%REPO%';
+
+let goLiveClicked = false;
 async function poll() {
+  if (goLiveClicked) return;
   try {
     const r = await fetch(`/preview/status?run_id=${RUN_ID}&owner=${OWNER}&repo=${REPO}`);
     const d = await r.json();
-    if (!d.ok) { document.getElementById('statusText').textContent = 'Error: ' + (d.error||'unknown'); return; }
+    if (!d.ok) {
+      document.getElementById('statusText').textContent = 'Error: ' + (d.error||'unknown');
+      document.getElementById('spinner').style.display = 'none';
+      return;
+    }
     if (d.done) {
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('actions').style.display = 'flex';
-      document.getElementById('note').style.display = 'block';
-      if (d.conclusion === 'success') {
-        document.getElementById('statusText').className = 'status-text success';
-        document.getElementById('statusText').textContent = 'Preview ready!';
-        if (d.artifact_url) {
-          document.getElementById('btnDownload').href = d.artifact_url;
-        } else {
-          document.getElementById('btnDownload').style.display = 'none';
-        }
-      } else {
-        document.getElementById('statusText').className = 'status-text failed';
-        document.getElementById('statusText').textContent = 'Preview failed (check GitHub for details)';
-        document.getElementById('btnDownload').style.display = 'none';
-        document.getElementById('btnGoLive').style.display = 'none';
-      }
-    } else {
-      document.getElementById('statusText').textContent = 'Running... (this takes ~2 minutes)';
-      setTimeout(poll, 3000);
+      document.getElementById('statusText').className = 'status-text stopped';
+      document.getElementById('statusText').textContent = 'Preview stopped';
+      return;
     }
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    let status = d.status || 'running';
+    document.getElementById('statusText').textContent = status.charAt(0).toUpperCase() + status.slice(1) + '... (' + elapsed + 's)';
+    setTimeout(poll, 5000);
   } catch(e) {
     document.getElementById('statusText').textContent = 'Connection error, retrying...';
-    setTimeout(poll, 3000);
+    setTimeout(poll, 5000);
   }
 }
+const startTime = Date.now();
+
+async function goLive() {
+  if (goLiveClicked) return;
+  goLiveClicked = true;
+  document.getElementById('btnGoLive').disabled = true;
+  document.getElementById('btnGoLive').textContent = 'Starting...';
+  document.getElementById('statusText').textContent = 'Stopping preview and starting live stream...';
+  document.getElementById('spinner').style.display = 'block';
+  try {
+    const r = await fetch('/preview/go_live');
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('statusText').className = 'status-text running';
+      document.getElementById('statusText').textContent = 'Live stream started!';
+      document.getElementById('spinner').style.display = 'none';
+      setTimeout(() => { location.href = '/'; }, 2000);
+    } else {
+      alert('Error: ' + d.error);
+      document.getElementById('btnGoLive').disabled = false;
+      document.getElementById('btnGoLive').textContent = '▶ Go Live';
+      goLiveClicked = false;
+    }
+  } catch(e) {
+    alert('Connection error');
+    document.getElementById('btnGoLive').disabled = false;
+    document.getElementById('btnGoLive').textContent = '▶ Go Live';
+    goLiveClicked = false;
+  }
+}
+
 poll();
 </script>
 </body>

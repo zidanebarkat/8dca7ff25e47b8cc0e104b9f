@@ -43,7 +43,7 @@ on:
 jobs:
   stream:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.preview == 'true' && 10 || 360 }}
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -153,7 +153,7 @@ jobs:
           VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
           CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
-            CMD="$CMD -t 30 -y preview_output.mp4"
+            CMD="$CMD -f null -"
           else
             URL="${{ inputs.output_url }}"
             if [[ "$URL" == srt://* ]]; then
@@ -163,13 +163,6 @@ jobs:
             fi
           fi
           eval "$CMD"
-
-      - name: Upload preview artifact
-        if: inputs.preview == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: preview-output
-          path: preview_output.mp4
 
       - name: Live restream
         if: steps.resolve.outputs.live == 'true'
@@ -189,7 +182,7 @@ jobs:
           VF="[0:v]$BEVELED[main];[1:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
           CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
-            CMD="$CMD -t 30 -y preview_output.mp4"
+            CMD="$CMD -f null -"
           else
             URL="${{ inputs.output_url }}"
             if [[ "$URL" == srt://* ]]; then
