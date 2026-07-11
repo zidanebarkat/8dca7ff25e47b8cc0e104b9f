@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python-native Kick chat overlay. Reads Pusher WebSocket, renders via Pillow, writes RGBA frames to FIFO."""
 
-import argparse, json, os, signal, sys, threading, time
+import argparse, json, os, re, signal, sys, threading, time
 from collections import deque
 from pathlib import Path
 from urllib.parse import urlencode
@@ -12,9 +12,6 @@ except ImportError:
     import requests
 
 from PIL import Image, ImageDraw, ImageFont
-
-import http.client
-http.client.HTTPConnection.debuglevel = 0
 
 parser = argparse.ArgumentParser(description='Kick chat overlay renderer')
 parser.add_argument('--channel', default='zed-bx')
@@ -101,7 +98,6 @@ def get_emote(emote_id):
     return img
 
 def parse_emotes(text):
-    import re
     parts = []
     last = 0
     for m in re.finditer(r'\[emote:(\d+):([^\]]+)\]', text):

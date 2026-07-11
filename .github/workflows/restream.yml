@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends ffmpeg build-essential libssl-dev fonts-dejavu-core
-          pip install -q yt-dlp curl_cffi websocket-client
+          pip install -q yt-dlp curl_cffi websocket-client pillow
 
       - name: Validate font
         run: |
