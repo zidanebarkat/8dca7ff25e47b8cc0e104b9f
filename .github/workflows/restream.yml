@@ -57,8 +57,8 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends ffmpeg build-essential libssl-dev fonts-dejavu-core xvfb chromium-browser x11-xserver-utils
-          pip install -q yt-dlp curl_cffi
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg build-essential libssl-dev fonts-dejavu-core
+          pip install -q yt-dlp curl_cffi websocket-client
 
       - name: Validate font
         run: |
@@ -103,24 +103,20 @@ jobs:
             done
           done
 
-      - name: Start browser overlay
+      - name: Start Python chat overlay
         run: |
-          python3 -m http.server --directory "${{ github.workspace }}" 9999 &
-          sleep 1
-          Xvfb :99 -screen 0 400x600x24 &
-          sleep 2
-          xsetroot -display :99 -solid "#00ff00"
-          if [ -n "${{ inputs.browser_overlay_url }}" ]; then
-            OVURL="${{ inputs.browser_overlay_url }}"
-          else
-            OVURL="http://127.0.0.1:9999/chat_overlay.html?channel=zed-bx"
-            if [ "${{ inputs.preview }}" = "true" ]; then
-              OVURL="${OVURL}&simulate=1"
-            fi
+          mkfifo /tmp/chat_overlay.fifo
+          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo"
+          if [ "${{ inputs.preview }}" = "true" ]; then
+            FLAGS="$FLAGS --simulate"
           fi
-          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --window-size=400,600 --window-position=0,0 --app="$OVURL" &
-          sleep 8
-          echo "browser=ready" >> "$GITHUB_ENV"
+          if [ -n "${{ inputs.browser_overlay_url }}" ]; then
+            echo "chat=fallback" >> "$GITHUB_ENV"
+          else
+            python3 ${{ github.workspace }}/chat_overlay.py $FLAGS &
+            echo "chat=python" >> "$GITHUB_ENV"
+            sleep 2
+          fi
 
       - name: Schedule self-reboot (before 6h limit)
         if: inputs.github_token != '' && inputs.preview != 'true'
@@ -152,9 +148,8 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
-          VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
-          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+          VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
+          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f rawvideo -pix_fmt rgba -s 400x600 -r 5 -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
             CMD="$CMD -f null -"
           else
@@ -181,9 +176,8 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
-          VF="[0:v]$BEVELED[main];[1:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
-          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f x11grab -framerate 30 -video_size 400x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
+          VF="[0:v]$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
+          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f rawvideo -pix_fmt rgba -s 400x600 -r 5 -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
             CMD="$CMD -f null -"
           else
