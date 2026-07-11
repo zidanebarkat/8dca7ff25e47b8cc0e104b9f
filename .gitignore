@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 venv/
 tiktok_cookies.json
+*.mp4
+concat.txt
+overlay.txt
+overlay*.txt
