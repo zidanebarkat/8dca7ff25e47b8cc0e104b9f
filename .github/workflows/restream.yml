@@ -96,29 +96,29 @@ jobs:
         if: inputs.browser_overlay_url != ''
         run: |
           cat > /tmp/overlay.html << 'ENDOFFILE'
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-body{margin:0;background:#00ff00;overflow:hidden;width:400px;height:600px}
-iframe{width:400px;height:600px;border:none}
-</style>
-</head>
-<body>
-<iframe id="f" src="THE_URL_PLACEHOLDER"></iframe>
-<script>
-var f=document.getElementById('f');
-f.onload=function(){
-  try{
-    var s=f.contentDocument.createElement('style');
-    s.textContent='html,body{background:#00ff00!important;min-height:100%}';
-    f.contentDocument.head.appendChild(s);
-  }catch(e){}
-};
-</script>
-</body>
-</html>
-ENDOFFILE
+          <!DOCTYPE html>
+          <html>
+          <head>
+          <style>
+          body{margin:0;background:#00ff00;overflow:hidden;width:400px;height:600px}
+          iframe{width:400px;height:600px;border:none}
+          </style>
+          </head>
+          <body>
+          <iframe id="f" src="THE_URL_PLACEHOLDER"></iframe>
+          <script>
+          var f=document.getElementById('f');
+          f.onload=function(){
+            try{
+              var s=f.contentDocument.createElement('style');
+              s.textContent='html,body{background:#00ff00!important;min-height:100%}';
+              f.contentDocument.head.appendChild(s);
+            }catch(e){}
+          };
+          </script>
+          </body>
+          </html>
+          ENDOFFILE
           sed -i "s|THE_URL_PLACEHOLDER|${{ inputs.browser_overlay_url }}|g" /tmp/overlay.html
           Xvfb :99 -screen 0 400x600x24 &
           sleep 2
