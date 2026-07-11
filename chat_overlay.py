@@ -375,9 +375,11 @@ def render_loop():
         if panel_url and frame_count % (FPS * 5) == 0:
             try:
                 buf = BytesIO()
-                frame.save(buf, 'JPEG', quality=70)
+                frame.convert('RGB').save(buf, 'JPEG', quality=70)
                 buf.seek(0)
-                requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
+                r = requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
+                if r.status_code != 200:
+                    print(f'chat_overlay: frame upload returned {r.status_code}', file=sys.stderr, flush=True)
             except Exception as e:
                 print(f'chat_overlay: frame upload error: {e}', file=sys.stderr, flush=True)
         elapsed = time.monotonic() - t0

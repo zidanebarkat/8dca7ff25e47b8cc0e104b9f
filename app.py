@@ -972,6 +972,8 @@ async function poll() {
     if (!d.done) {
       img.src = '/preview_frame?' + Date.now();
       img.className = 'preview-image';
+      img.onerror = function() { this.style.display = 'none'; };
+      img.onload = function() { this.style.display = 'block'; };
     }
     setTimeout(poll, 5000);
   } catch(e) {
