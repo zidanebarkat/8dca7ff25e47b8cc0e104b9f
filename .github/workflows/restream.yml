@@ -115,10 +115,17 @@ jobs:
             done
           done
 
+      - name: Extract chat channel
+        id: chat_channel
+        run: |
+          url="${{ inputs.source_url }}"
+          channel=$(echo "$url" | sed 's|/$||' | awk -F/ '{print $NF}' | grep -oP '^[a-zA-Z0-9_-]+' || echo "")
+          echo "channel=${channel:-zed-bx}" >> "$GITHUB_OUTPUT"
+
       - name: Start Python chat overlay
         run: |
           mkfifo /tmp/chat_overlay.fifo
-          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
+          FLAGS="--channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
           if [[ "$PREVIEW" == "true" ]]; then
             FLAGS="$FLAGS --simulate"
           fi
