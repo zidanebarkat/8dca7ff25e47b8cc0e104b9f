@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 parser = argparse.ArgumentParser(description='Kick chat overlay renderer')
 parser.add_argument('--channel', default='zed-bx')
-parser.add_argument('--output-file', default='/tmp/chat_overlay.png')
+parser.add_argument('--fifo', default='/tmp/chat_overlay.fifo')
 parser.add_argument('--simulate', action='store_true')
 parser.add_argument('--badge-cache', default='/tmp/chat_badges')
 parser.add_argument('--emote-cache', default='/tmp/chat_emotes')
@@ -73,6 +73,7 @@ PAD = 8
 MSG_MARGIN = 4
 messages = deque(maxlen=MAX_MSGS)
 running = True
+fifo_fh = None
 
 Path(args.badge_cache).mkdir(parents=True, exist_ok=True)
 Path(args.emote_cache).mkdir(parents=True, exist_ok=True)
@@ -358,15 +359,16 @@ def pusher_thread_func(chatroom_id):
     ws.close()
 
 def render_loop():
-    output_path = args.output_file
-    tmp_path = output_path + '.tmp'
+    global fifo_fh
+    fifo_path = args.fifo
+    if not os.path.exists(fifo_path):
+        os.mkfifo(fifo_path)
+    log(f'chat_overlay: waiting for reader on {fifo_path}...')
+    fifo_fh = open(fifo_path, 'wb')
+    log(f'chat_overlay: fifo reader connected, starting render at {FPS}fps')
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     frame_interval = 1.0 / FPS
-    # Write initial blank frame
-    img.save(tmp_path, 'PNG')
-    os.rename(tmp_path, output_path)
-    log(f'chat_overlay: started, writing frames to {output_path} at {FPS}fps')
     while running:
         t0 = time.monotonic()
         try:
@@ -377,15 +379,23 @@ def render_loop():
             log(traceback.format_exc())
             frame = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
         try:
-            frame.save(tmp_path, 'PNG')
-            os.rename(tmp_path, output_path)
+            frame.save(fifo_fh, format='PNG')
+            fifo_fh.flush()
+        except BrokenPipeError:
+            log('chat_overlay: pipe broken, exiting')
+            break
         except Exception as e:
-            log(f'chat_overlay: write error: {e}')
+            log(f'chat_overlay: fifo write error: {e}')
             break
         elapsed = time.monotonic() - t0
         sleep_time = frame_interval - elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
+    fifo_fh.close()
+    try:
+        os.unlink(fifo_path)
+    except:
+        pass
 
 def signal_handler(signum, frame):
     global running

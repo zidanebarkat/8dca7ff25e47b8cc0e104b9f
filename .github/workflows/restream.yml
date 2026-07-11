@@ -122,9 +122,12 @@ jobs:
           channel=$(echo "$url" | sed 's|/$||' | awk -F/ '{print $NF}' | grep -oP '^[a-zA-Z0-9_-]+' || echo "")
           echo "channel=${channel:-zed-bx}" >> "$GITHUB_OUTPUT"
 
+      - name: Create chat FIFO
+        run: mkfifo /tmp/chat_overlay.fifo
+
       - name: Start Python chat overlay
         run: |
-          FLAGS="--channel ${{ steps.chat_channel.outputs.channel }} --output-file /tmp/chat_overlay.png --log-file /tmp/chat_overlay.log"
+          FLAGS="--channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             echo "chat=fallback" >> "$GITHUB_ENV"
           else
@@ -169,7 +172,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2 -reload 1 -framerate 5 -i /tmp/chat_overlay.png -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0:profile=high" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0:profile=high" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Fallback restream (live)
         if: steps.resolve.outputs.live != 'true' && inputs.preview != 'true'
@@ -184,14 +187,22 @@ jobs:
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
           VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
-          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2 -reload 1 -framerate 5 -i /tmp/chat_overlay.png -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params \"keyint=120:min-keyint=120:scenecut=0:profile=high\" -pix_fmt yuv420p -c:a aac -b:a 128k"
+          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params \"keyint=120:min-keyint=120:scenecut=0:profile=high\" -pix_fmt yuv420p -c:a aac -b:a 128k"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
           else
             CMD="$CMD -f flv \"$URL\""
           fi
-          eval "$CMD"
+          eval "$CMD" || {
+            echo "Restream failed, recreating FIFO and retrying once..."
+            mkfifo /tmp/chat_overlay.fifo 2>/dev/null || true
+            if ! ps aux | grep -q "[c]hat_overlay.py"; then
+              python3 ${{ github.workspace }}/chat_overlay.py --channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log &
+              sleep 2
+            fi
+            eval "$CMD"
+          }
 
       - name: Live restream (preview)
         if: steps.resolve.outputs.live == 'true' && inputs.preview == 'true'
@@ -214,7 +225,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2 -reload 1 -framerate 5 -i /tmp/chat_overlay.png -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0:profile=high" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0:profile=high" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Live restream (live)
         if: steps.resolve.outputs.live == 'true' && inputs.preview != 'true'
@@ -231,11 +242,19 @@ jobs:
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
           VF="[0:v]$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
-          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f image2 -reload 1 -framerate 5 -i /tmp/chat_overlay.png -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params \"keyint=120:min-keyint=120:scenecut=0:profile=high\" -pix_fmt yuv420p -c:a aac -b:a 128k"
+          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -profile:v high -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params \"keyint=120:min-keyint=120:scenecut=0:profile=high\" -pix_fmt yuv420p -c:a aac -b:a 128k"
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
           else
             CMD="$CMD -f flv \"$URL\""
           fi
-          eval "$CMD"
+          eval "$CMD" || {
+            echo "Restream failed, recreating FIFO and retrying once..."
+            mkfifo /tmp/chat_overlay.fifo 2>/dev/null || true
+            if ! ps aux | grep -q "[c]hat_overlay.py"; then
+              python3 ${{ github.workspace }}/chat_overlay.py --channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log &
+              sleep 2
+            fi
+            eval "$CMD"
+          }
