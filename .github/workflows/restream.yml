@@ -40,7 +40,6 @@ on:
         required: false
         default: 'false'
 
-env:
 jobs:
   stream:
     runs-on: ubuntu-latest
