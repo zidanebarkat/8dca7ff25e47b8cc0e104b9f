@@ -99,6 +99,23 @@ jobs:
           sleep 4
           echo "browser=ready" >> "$GITHUB_ENV"
 
+      - name: Schedule self-reboot (before 6h limit)
+        if: inputs.github_token != ''
+        run: |
+          (sleep 21000 && curl -s -X POST \
+            -H "Authorization: Bearer ${{ inputs.github_token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/restream.yml/dispatches" \
+            -d '{"ref":"main","inputs":{
+              "source_url":"${{ inputs.source_url }}",
+              "output_url":"${{ inputs.output_url }}",
+              "overlay_text":"${{ inputs.overlay_text }}",
+              "browser_overlay_url":"${{ inputs.browser_overlay_url }}",
+              "fallback_video":"${{ inputs.fallback_video }}",
+              "fallback_playlist":"${{ inputs.fallback_playlist }}",
+              "github_token":"${{ inputs.github_token }}"
+            }}') &
+
       - name: Fallback restream
         if: steps.resolve.outputs.live != 'true'
         env:
