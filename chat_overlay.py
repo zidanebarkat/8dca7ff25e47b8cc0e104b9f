@@ -8,9 +8,11 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 try:
-    from curl_cffi import requests
+    from curl_cffi import requests as curl_requests
 except ImportError:
-    import requests
+    curl_requests = None
+import requests as std_requests
+requests = curl_requests or std_requests  # prefer curl_cffi for Cloudflare, fallback to std
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -396,7 +398,7 @@ def render_loop():
                 buf = BytesIO()
                 frame.convert('RGB').save(buf, 'JPEG', quality=70)
                 buf.seek(0)
-                r = requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
+                r = std_requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
                 if r.status_code != 200:
                     log(f'chat_overlay: frame upload returned {r.status_code}')
                 elif frame_count == FPS * 5:
@@ -422,6 +424,8 @@ def signal_handler(signum, frame):
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+
+    print(f'chat_overlay: requests backend: {"curl_cffi" if curl_requests else "standard"}', file=sys.stderr, flush=True)
 
     chatroom_id = None
     if not args.simulate:
