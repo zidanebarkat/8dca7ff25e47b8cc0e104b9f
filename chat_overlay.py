@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Python-native Kick chat overlay. Reads Pusher WebSocket, renders via Pillow, writes RGBA frames to FIFO."""
 
-import argparse, io, json, os, re, signal, sys, threading, time
+import argparse, json, os, re, signal, sys, threading, time
 from collections import deque
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -12,7 +11,7 @@ try:
 except ImportError:
     curl_requests = None
 import requests as std_requests
-requests = curl_requests or std_requests  # prefer curl_cffi for Cloudflare, fallback to std
+requests = curl_requests or std_requests
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -26,7 +25,6 @@ parser.add_argument('--width', type=int, default=400)
 parser.add_argument('--height', type=int, default=600)
 parser.add_argument('--fps', type=int, default=5)
 parser.add_argument('--max-messages', type=int, default=20)
-parser.add_argument('--panel-url', default='', help='Panel URL to POST preview frames to')
 parser.add_argument('--log-file', default='', help='Log file path for debug output')
 args = parser.parse_args()
 
@@ -371,8 +369,6 @@ def render_loop():
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     frame_interval = 1.0 / FPS
-    frame_count = 0
-    panel_url = args.panel_url.rstrip('/')
     while running:
         t0 = time.monotonic()
         try:
@@ -392,21 +388,6 @@ def render_loop():
         except Exception as e:
             log(f'chat_overlay: fifo write error: {e}')
             break
-        frame_count += 1
-        if panel_url and frame_count % (FPS * 5) == 0:
-            try:
-                buf = BytesIO()
-                frame.convert('RGB').save(buf, 'JPEG', quality=70)
-                buf.seek(0)
-                r = std_requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
-                if r.status_code != 200:
-                    log(f'chat_overlay: frame upload returned {r.status_code}')
-                elif frame_count == FPS * 5:
-                    log(f'chat_overlay: first frame uploaded OK')
-            except Exception as e:
-                log(f'chat_overlay: frame upload error: {e}')
-            except Exception as e:
-                print(f'chat_overlay: frame upload error: {e}', file=sys.stderr, flush=True)
         elapsed = time.monotonic() - t0
         sleep_time = frame_interval - elapsed
         if sleep_time > 0:

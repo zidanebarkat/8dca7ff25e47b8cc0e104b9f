@@ -106,7 +106,7 @@ jobs:
       - name: Start Python chat overlay
         run: |
           mkfifo /tmp/chat_overlay.fifo
-          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --panel-url https://strwithgit.pythonanywhere.com --log-file /tmp/chat_overlay.log"
+          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
           if [ "${{ inputs.preview }}" = "true" ]; then
             FLAGS="$FLAGS --simulate"
           fi
@@ -151,7 +151,15 @@ jobs:
           VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
           CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f rawvideo -pix_fmt rgba -s 400x600 -r 5 -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
-            CMD="$CMD -f null -"
+            # Upload composite preview frames every 3s
+            (while true; do
+              if [ -f /tmp/preview_composite.jpg ]; then
+                curl -s -X POST -F "frame=@/tmp/preview_composite.jpg" "https://strwithgit.pythonanywhere.com/preview_frame_upload" >/dev/null 2>&1 || true
+              fi
+              sleep 3
+            done) &
+            # Second output: composite frame snapshot every 5s
+            CMD="$CMD -f null - -map '[out]' -f image2 -update 1 -q:v 5 -r 1/5 /tmp/preview_composite.jpg"
           else
             URL="${{ inputs.output_url }}"
             if [[ "$URL" == srt://* ]]; then
@@ -179,7 +187,13 @@ jobs:
           VF="[0:v]$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
           CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f rawvideo -pix_fmt rgba -s 400x600 -r 5 -i /tmp/chat_overlay.fifo -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
           if [[ "${{ inputs.preview }}" == "true" ]]; then
-            CMD="$CMD -f null -"
+            (while true; do
+              if [ -f /tmp/preview_composite.jpg ]; then
+                curl -s -X POST -F "frame=@/tmp/preview_composite.jpg" "https://strwithgit.pythonanywhere.com/preview_frame_upload" >/dev/null 2>&1 || true
+              fi
+              sleep 3
+            done) &
+            CMD="$CMD -f null - -map '[out]' -f image2 -update 1 -q:v 5 -r 1/5 /tmp/preview_composite.jpg"
           else
             URL="${{ inputs.output_url }}"
             if [[ "$URL" == srt://* ]]; then
