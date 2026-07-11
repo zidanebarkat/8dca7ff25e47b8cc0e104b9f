@@ -895,7 +895,7 @@ h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
   <a class="btn btn-grey" href="/">← Back to panel</a>
 </div>
 <div class="note" id="note">
-  Preview runs the full pipeline (Xvfb + Chromium + overlays) on GitHub.<br>
+  Preview runs the full pipeline (Python chat overlay + FFmpeg) on GitHub.<br>
   It outputs to /dev/null — same setup as a real stream, just no destination.<br>
   Click <b>Go Live</b> when ready — preview stops and real stream starts.
 </div>
