@@ -27,6 +27,10 @@ on:
         description: Overlay text on video
         required: false
         default: ''
+      browser_overlay_url:
+        description: Browser overlay URL (chat, alerts, etc.)
+        required: false
+        default: ''
 
 jobs:
   stream:
@@ -38,7 +42,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg build-essential libssl-dev fonts-dejavu-core
+          sudo apt-get install -y -qq ffmpeg build-essential libssl-dev fonts-dejavu-core xvfb chromium-browser fluxbox
           pip install -q yt-dlp curl_cffi
 
       - name: Validate font
@@ -84,6 +88,17 @@ jobs:
             done
           done
 
+      - name: Start browser overlay
+        if: inputs.browser_overlay_url != ''
+        run: |
+          Xvfb :99 -screen 0 800x600x24 &
+          sleep 2
+          fluxbox -display :99 &
+          sleep 1
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --kiosk --disable-dev-shm-usage "${{ inputs.browser_overlay_url }}" &
+          sleep 4
+          echo "browser=ready" >> "$GITHUB_ENV"
+
       - name: Fallback restream
         if: steps.resolve.outputs.live != 'true'
         env:
@@ -96,9 +111,18 @@ jobs:
             curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
             sleep 10
           done) &
-          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
-          VF="scale=1920:1080,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6,drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
-          CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+          if [ -z "${{ inputs.browser_overlay_url }}" ]; then
+            touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
+          fi
+          BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
+          CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
+          if [ -n "${{ inputs.browser_overlay_url }}" ]; then
+            VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]scale=400:-1[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
+            CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f x11grab -framerate 30 -video_size 800x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 1:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+          else
+            VF="scale=1920:1080,$BEVELED,$CHAT"
+            CMD="ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -map 0:v -map 1:a -vf \"$VF\" -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -shortest -bufsize 4000k -maxrate 2000k -g 60"
+          fi
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""
@@ -120,9 +144,18 @@ jobs:
             curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt
             sleep 10
           done) &
-          touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
-          VF="-vf \"drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6,drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8\""
-          CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
+          if [ -z "${{ inputs.browser_overlay_url }}" ]; then
+            touch chat.txt && SOURCE_URL="${{ inputs.source_url }}" KICK_CHANNEL=zed-bx python3 chat_collector.py &
+          fi
+          BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
+          CHAT="drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=22:fontcolor=white:x=15:y=h-th-420:box=1:boxcolor=black@0.5:boxborderw=8"
+          if [ -n "${{ inputs.browser_overlay_url }}" ]; then
+            VF="[0:v]$BEVELED[main];[2:v]scale=400:-1[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
+            CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -f x11grab -framerate 30 -video_size 800x600 -i :99.0 -filter_complex \"$VF\" -map '[out]' -map 0:a -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
+          else
+            VF="-vf \"$BEVELED,$CHAT\""
+            CMD="ffmpeg -nostdin -re -protocol_whitelist \"$PWL\" -fflags +discardcorrupt -timeout 30000000 -i \"$HLS\" -map 0:v -map 0:a $VF -c:v libx264 -preset ultrafast -b:v 2000k -c:a aac -b:a 96k -bufsize 4000k -maxrate 2000k -g 60"
+          fi
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             CMD="$CMD -f mpegts \"$URL\""

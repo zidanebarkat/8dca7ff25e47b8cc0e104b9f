@@ -57,6 +57,7 @@ DEFAULTS = {
     'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
     'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
     'overlay_text': '',
+    'browser_overlay_url': '',
 }
 
 wanted = False
@@ -98,6 +99,7 @@ def trigger_workflow(source_url, output_url):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -120,6 +122,7 @@ def trigger_yt_workflow(source_url, youtube_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -142,6 +145,7 @@ def trigger_twt_workflow(source_url, twitch_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -164,6 +168,7 @@ def trigger_tt_workflow(source_url, tiktok_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -186,6 +191,7 @@ def trigger_fb_workflow(source_url, facebook_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -824,6 +830,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
     </div>
+    <div class="form-group">
+      <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
+      <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="keepalive" id="keepalive" onchange="saveConfig()" style="width:auto">
@@ -1076,6 +1087,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
     </div>
+    <div class="form-group">
+      <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
+      <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="twt_keepalive" id="twt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1326,6 +1342,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
     </div>
+    <div class="form-group">
+      <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
+      <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="yt_keepalive" id="yt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1572,6 +1593,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
     </div>
+    <div class="form-group">
+      <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
+      <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="tt_keepalive" id="tt_keepalive" onchange="saveConfig()" style="width:auto">
@@ -1811,6 +1837,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <input type="text" name="overlay_text" id="overlay_text" placeholder="Live on Facebook!" style="flex:1">
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
+    </div>
+    <div class="form-group">
+      <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
+      <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
