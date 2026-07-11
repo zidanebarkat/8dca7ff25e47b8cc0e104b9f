@@ -690,6 +690,10 @@ def fb_resolve_source():
         return jsonify({'ok': True, 'hls': hls, 'source': url, 'fallback': fallback})
     return jsonify({'ok': False, 'error': 'Not live'}), 400
 
+@app.route('/chat')
+def chat_index():
+    return HTML_CHAT_PANEL
+
 @app.route('/fma_parse', methods=['POST'])
 def fma_parse():
     data = request.get_json(force=True)
@@ -772,6 +776,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>📡 Stream Panel</h1>
 <div class="status-bar">
@@ -1020,6 +1025,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#7c3aed;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Twitch Stream Panel</h1>
 <div class="status-bar">
@@ -1280,6 +1286,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>YouTube Stream Panel</h1>
 <div class="status-bar">
@@ -1518,6 +1525,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#d43089;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>TikTok Stream Panel</h1>
 <div class="status-bar">
@@ -1763,6 +1771,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#1877f2;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Facebook Stream Panel</h1>
 <div class="status-bar">
@@ -1948,6 +1957,223 @@ function fetchLogs() {
 fetch('/facebook/status').then(r=>r.json()).then(d=>{ if(d.config) applyForm(d.config); });
 setInterval(updateStatus, 3000);
 setInterval(fetchLogs, 2000);
+</script>
+</body>
+</html>'''
+
+HTML_CHAT_PANEL = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat Overlay Generator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9}
+.container{max-width:900px;margin:0 auto;padding:20px}
+h1{font-size:22px;margin-bottom:20px;color:#fff}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#8b949e;margin-bottom:4px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#58a6ff}
+.form-group input[type="checkbox"]{width:auto;margin-right:6px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover:not(:disabled){background:#2ea043}
+.btn-purple{background:#7c3aed;color:#fff}
+.btn-purple:hover:not(:disabled){background:#8b5cf6}
+.btn-blue{background:#1f6feb;color:#fff}
+.btn-blue:hover:not(:disabled){background:#388bfd}
+.btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-grey:hover:not(:disabled){background:#30363d}
+.btn-sm{padding:6px 14px;font-size:13px}
+.url-box{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:12px;font-family:monospace;font-size:13px;word-break:break-all;margin-top:12px;display:none}
+.cls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.cls label{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  <a href="/" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
+  <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
+  <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/chat" style="padding:8px 16px;background:#7c3aed;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Chat</a>
+</div>
+<h1>Chat Overlay Generator</h1>
+<p style="color:#8b949e;font-size:14px;margin-bottom:16px">Generate a Fusion Chat overlay URL for OBS using <a href="https://kicktools.app/fusion_chat/" target="_blank" style="color:#58a6ff">kicktools.app</a></p>
+<div class="card">
+  <h2>Fusion Chat Setup</h2>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Kick Username</label>
+      <input type="text" id="kick" placeholder="Type Kick username">
+    </div>
+    <div class="form-group">
+      <label>Twitch Username</label>
+      <input type="text" id="twitch" placeholder="Type Twitch username">
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Font</label>
+      <select id="font">
+        <option value="Asap Condensed">Asap Condensed</option>
+        <option value="Barlow Condensed">Barlow Condensed</option>
+        <option value="Caveat">Caveat</option>
+        <option value="Charm">Charm</option>
+        <option value="Crimson Text">Crimson Text</option>
+        <option value="Dosis">Dosis</option>
+        <option value="Exo">Exo</option>
+        <option value="Inter" selected>Inter</option>
+        <option value="Itim">Itim</option>
+        <option value="Oswald">Oswald</option>
+        <option value="Roboto">Roboto</option>
+        <option value="Teko">Teko</option>
+        <option value="Ubuntu">Ubuntu</option>
+        <option value="Zilla Slab">Zilla Slab</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Font Size</label>
+      <select id="fontSize">
+        <option value="small">Small</option>
+        <option value="medium">Medium</option>
+        <option value="Large" selected>Large</option>
+        <option value="x-large">X-Large</option>
+        <option value="xx-large">XX-large</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Font Shadow</label>
+      <select id="fontShadow">
+        <option value="shadow-na" selected>None</option>
+        <option value="shadow-sm">Small</option>
+        <option value="shadow-m">Medium</option>
+        <option value="shadow-lg">Large</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Font Color</label>
+      <input type="color" id="fontColor" value="#ffffff" style="width:100%;height:40px;padding:2px;background:#0d1117;border:1px solid #30363d;border-radius:6px;cursor:pointer">
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Theme</label>
+      <select id="theme">
+        <option value="custom" selected>Customizable</option>
+        <option value="background">Custom w/ Background</option>
+        <option value="nofade">Custom no Fade-In</option>
+        <option value="basic">Basic</option>
+        <option value="frost">Frost</option>
+        <option value="h1">Horizontal V1</option>
+        <option value="h2">Horizontal V2</option>
+        <option value="halloween">Halloween 1</option>
+        <option value="kickgreen">Kick Brand</option>
+        <option value="platform">Platform</option>
+        <option value="twitch">Twitch Brand</option>
+        <option value="vpink">Vibrant Pink</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Case Settings</label>
+      <select id="fontCase">
+        <option value="none" selected>Regular Case</option>
+        <option value="lowercase">Lower Case</option>
+        <option value="uppercase">Upper Case</option>
+        <option value="capitalize">Capitalize</option>
+      </select>
+    </div>
+  </div>
+  <hr style="border:none;border-top:1px solid #30363d;margin:16px 0">
+  <div class="cls">
+    <label><input type="checkbox" id="timestamp" checked> Timestamp</label>
+    <label><input type="checkbox" id="platformBadges" checked> Platform Badges</label>
+    <label><input type="checkbox" id="userBadges" checked> User Badges</label>
+    <label><input type="checkbox" id="bots" checked> Bots</label>
+    <label><input type="checkbox" id="highlight" checked> Highlight @Messages</label>
+    <label><input type="checkbox" id="fade" checked> Fade Messages</label>
+    <label style="gap:2px"> <input type="number" id="fadeTime" value="30" style="width:60px;padding:4px 6px;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-size:13px"> Seconds</label>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:8px">
+    <button class="btn btn-purple" onclick="generate()">Generate URL</button>
+    <button class="btn btn-grey btn-sm" onclick="resetForm()">Reset</button>
+  </div>
+  <div class="url-box" id="urlBox">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <strong style="color:#f0f6fc;font-size:14px">Your Overlay URL</strong>
+      <button class="btn btn-blue btn-sm" onclick="copyUrl()">Copy</button>
+    </div>
+    <code id="urlOutput" style="color:#58a6ff"></code>
+  </div>
+</div>
+<div class="card">
+  <h2>OBS Setup</h2>
+  <ol style="padding-left:20px;color:#c9d1d9;font-size:14px;line-height:1.8">
+    <li>In OBS, under Sources, click <strong>+</strong> and add a new <strong>Browser Source</strong></li>
+    <li>Name it something like "Chat Overlay" and click OK</li>
+    <li>Paste the generated URL into the URL field</li>
+    <li><strong>Important:</strong> Use Width/Height to size the overlay — don't resize with the mouse (causes rendering issues)</li>
+    <li>For Horizontal Themes: set Width to your canvas width (usually 1080) and Height to ~100</li>
+    <li>Click OK and position the overlay</li>
+  </ol>
+</div>
+</div>
+<script>
+function generate() {
+  const base = 'https://kicktools.app/fusion_chat/fusion-chat.html';
+  const p = new URLSearchParams();
+  const kick = document.getElementById('kick').value.trim();
+  const twitch = document.getElementById('twitch').value.trim();
+  if (!kick && !twitch) { alert('Enter at least one username'); return; }
+  if (kick) p.set('kick', kick);
+  if (twitch) p.set('twitch', twitch);
+  p.set('font', document.getElementById('font').value);
+  p.set('fontSize', document.getElementById('fontSize').value);
+  p.set('fontShadow', document.getElementById('fontShadow').value);
+  p.set('fontColor', document.getElementById('fontColor').value);
+  p.set('theme', document.getElementById('theme').value);
+  p.set('fontCase', document.getElementById('fontCase').value);
+  if (document.getElementById('timestamp').checked) p.set('timestamp', 'on');
+  if (document.getElementById('platformBadges').checked) p.set('platformBadges', 'on');
+  if (document.getElementById('userBadges').checked) p.set('userBadges', 'on');
+  if (document.getElementById('bots').checked) p.set('bots', 'on');
+  if (document.getElementById('highlight').checked) p.set('highlight', 'on');
+  if (document.getElementById('fade').checked) { p.set('fade', 'on'); p.set('fadeTime', document.getElementById('fadeTime').value); }
+  const url = base + '?' + p.toString();
+  document.getElementById('urlOutput').textContent = url;
+  document.getElementById('urlBox').style.display = 'block';
+}
+function copyUrl() {
+  const url = document.getElementById('urlOutput').textContent;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('.url-box .btn-blue');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  }).catch(() => alert('Copy failed. Select and copy manually.'));
+}
+function resetForm() {
+  document.querySelectorAll('input[type="text"]').forEach(e => e.value = '');
+  document.getElementById('fontColor').value = '#ffffff';
+  document.getElementById('font').value = 'Inter';
+  document.getElementById('fontSize').value = 'Large';
+  document.getElementById('fontShadow').value = 'shadow-na';
+  document.getElementById('theme').value = 'custom';
+  document.getElementById('fontCase').value = 'none';
+  document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
+  document.getElementById('fadeTime').value = '30';
+  document.getElementById('urlBox').style.display = 'none';
+}
 </script>
 </body>
 </html>'''
