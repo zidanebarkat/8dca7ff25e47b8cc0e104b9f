@@ -54,6 +54,7 @@ html, body {
 const MAX = 20;
 const chat = document.getElementById('chat');
 const channel = new URLSearchParams(location.search).get('channel') || 'zed-bx';
+const simulate = new URLSearchParams(location.search).get('simulate');
 
 ComfyJS.Init(channel);
 
@@ -74,6 +75,44 @@ ComfyJS.onChat = (user, message, flags, self, extra) => {
     chat.removeChild(chat.firstChild);
   }
 };
+
+if (simulate) {
+  const testUsers = [
+    { name: 'StreamFan42', badges: ['https://kick.com/assets/badges/sub-1.png'] },
+    { name: 'ChatMaster', badges: [] },
+    { name: 'KickMod', badges: ['https://kick.com/assets/badges/mod.png'] },
+    { name: 'NewUser', badges: [] },
+    { name: 'SubKilla', badges: ['https://kick.com/assets/badges/sub-1.png'] },
+  ];
+  const testMessages = [
+    'Hey! Great stream!',
+    "LOL that was funny 😂",
+    'First time watching, hi everyone!',
+    'Keep it up! 🔥',
+    'Hello from the chat!',
+    'Nice overlay setup!',
+    'PogChamp!',
+    'Can you play this song?',
+    'Hello! 👋',
+    'Fire emoji 🔥🔥🔥',
+    'Love the vibes here',
+    'What game is this?',
+  ];
+  let idx = 0;
+  function addTestMsg() {
+    const u = testUsers[Math.floor(Math.random() * testUsers.length)];
+    const msg = testMessages[Math.floor(Math.random() * testMessages.length)];
+    const div = document.createElement('div');
+    div.className = 'msg';
+    let badgeHtml = u.badges.map(b => `<img class="badge" src="${b}" alt="" onerror="this.style.display='none'">`).join('');
+    div.innerHTML = `${badgeHtml}<span class="user">${u.name}</span><span class="text">${escapeHtml(msg)}</span>`;
+    chat.appendChild(div);
+    while (chat.children.length > MAX) chat.removeChild(chat.firstChild);
+    idx++;
+    setTimeout(addTestMsg, 3000 + Math.random() * 4000);
+  }
+  setTimeout(addTestMsg, 2000);
+}
 
 function escapeHtml(text) {
   const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
