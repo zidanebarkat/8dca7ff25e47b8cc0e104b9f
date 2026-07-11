@@ -961,6 +961,7 @@ async function poll() {
       }
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('actions').style.display = 'flex';
+      document.getElementById('btnGoLive').style.display = 'none';
       document.getElementById('statusText').className = 'status-text stopped';
       document.getElementById('statusText').textContent = 'Preview stopped';
       return;
@@ -968,13 +969,14 @@ async function poll() {
     staleRetries = 0;
     let status = d.status || 'running';
     document.getElementById('statusText').textContent = status.charAt(0).toUpperCase() + status.slice(1) + '... (' + elapsed + 's)';
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('actions').style.display = 'flex';
+    document.getElementById('btnGoLive').style.display = '';
     const img = document.getElementById('previewImage');
-    if (!d.done) {
-      img.src = '/preview_frame?' + Date.now();
-      img.className = 'preview-image';
-      img.onerror = function() { this.style.display = 'none'; };
-      img.onload = function() { this.style.display = 'block'; };
-    }
+    img.src = '/preview_frame?' + Date.now();
+    img.className = 'preview-image';
+    img.onerror = function() { this.style.display = 'none'; };
+    img.onload = function() { this.style.display = 'block'; };
     setTimeout(poll, 5000);
   } catch(e) {
     if (elapsed < 20) {
