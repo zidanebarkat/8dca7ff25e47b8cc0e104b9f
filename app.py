@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 import os, time, json, requests, threading, subprocess
 
 _ENV = {}
@@ -760,17 +760,26 @@ def preview_page():
     repo = cfg.get('github_repo') or GITHUB_REPO
     if not token or not owner or not repo:
         return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Unavailable</h1><p>Configure GitHub credentials first.</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
-    # Cancel any existing preview first
+    # Check if already running
     existing = get_active_preview_run(token, owner, repo)
     if existing:
-        cancel_workflow(existing, token, owner, repo)
+        return redirect(f'/preview_status_page?run_id={existing}&owner={owner}&repo={repo}')
     msg, run_id, err = trigger_workflow(cfg.get('source_url',''), cfg.get('output_url',''), preview=True)
     if err:
         return f'<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Error</h1><p>{err}</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
     # Save preview run_id
     with open('preview_run_id.txt', 'w') as f:
         f.write(str(run_id or ''))
-    return PREVIEW_HTML.replace('%RUN_ID%', str(run_id or '')).replace('%OWNER%', owner).replace('%REPO%', repo)
+    return redirect(f'/preview_status_page?run_id={run_id}&owner={owner}&repo={repo}')
+
+@app.route('/preview_status_page')
+def preview_status_page():
+    run_id = request.args.get('run_id')
+    owner = request.args.get('owner')
+    repo = request.args.get('repo')
+    if not run_id or not owner or not repo:
+        return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Invalid preview link</h1><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    return PREVIEW_HTML.replace('%RUN_ID%', run_id).replace('%OWNER%', owner).replace('%REPO%', repo)
 
 @app.route('/preview/status')
 def preview_status():
@@ -833,6 +842,17 @@ def get_active_preview_run(token, owner, repo):
                 return run['id']
     return None
 
+@app.route('/preview/restart')
+def preview_restart():
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('github_repo') or GITHUB_REPO
+    existing = get_active_preview_run(token, owner, repo)
+    if existing:
+        cancel_workflow(existing, token, owner, repo)
+    return redirect('/preview')
+
 PREVIEW_HTML = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -871,6 +891,7 @@ h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
 </div>
 <div class="actions" id="actions" style="display:none">
   <button class="btn btn-red" id="btnGoLive" onclick="goLive()">▶ Looks good, Go Live!</button>
+  <a class="btn btn-grey" href="/preview/restart">🔄 Restart Preview</a>
   <a class="btn btn-grey" href="/">← Back to panel</a>
 </div>
 <div class="note" id="note">
