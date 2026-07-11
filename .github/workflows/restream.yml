@@ -122,9 +122,11 @@ jobs:
           channel=$(echo "$url" | sed 's|/$||' | awk -F/ '{print $NF}' | grep -oP '^[a-zA-Z0-9_-]+' || echo "")
           echo "channel=${channel:-zed-bx}" >> "$GITHUB_OUTPUT"
 
+      - name: Create chat FIFO
+        run: mkfifo /tmp/chat_overlay.fifo
+
       - name: Start Python chat overlay
         run: |
-          mkfifo /tmp/chat_overlay.fifo
           FLAGS="--channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             echo "chat=fallback" >> "$GITHUB_ENV"
@@ -177,6 +179,7 @@ jobs:
         env:
           OT: ${{ inputs.overlay_text }}
         run: |
+          mkfifo /tmp/chat_overlay.fifo 2>/dev/null || true
           FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
           echo "$OT" > overlay.txt
           (while true; do
@@ -226,6 +229,7 @@ jobs:
         env:
           OT: ${{ inputs.overlay_text }}
         run: |
+          mkfifo /tmp/chat_overlay.fifo 2>/dev/null || true
           HLS="${{ steps.resolve.outputs.hls }}"
           PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
           FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
