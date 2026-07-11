@@ -111,7 +111,7 @@ jobs:
           else
             OVURL="http://127.0.0.1:9999/chat_overlay.html?channel=zed-bx"
           fi
-          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --kiosk "$OVURL" &
+          DISPLAY=:99 chromium-browser --no-sandbox --disable-gpu --disable-extensions --disable-dev-shm-usage --no-first-run --window-size=400,600 --window-position=0,0 --app="$OVURL" &
           sleep 8
           echo "browser=ready" >> "$GITHUB_ENV"
 
