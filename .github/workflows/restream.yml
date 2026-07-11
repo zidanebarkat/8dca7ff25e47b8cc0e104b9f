@@ -40,12 +40,25 @@ on:
         required: false
         default: 'false'
 
+env:
 jobs:
   stream:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      PREVIEW: ${{ inputs.preview }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug preview value
+        run: |
+          echo "PREVIEW env = [$PREVIEW]"
+          echo "inputs.preview = [${{ inputs.preview }}]"
+          if [[ "$PREVIEW" == "true" ]]; then
+            echo "PREVIEW is true"
+          else
+            echo "PREVIEW is not true"
+          fi
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -107,7 +120,7 @@ jobs:
         run: |
           mkfifo /tmp/chat_overlay.fifo
           FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
-          if [[ "${{ inputs.preview }}" == "true" ]]; then
+          if [[ "$PREVIEW" == "true" ]]; then
             FLAGS="$FLAGS --simulate"
           fi
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
@@ -119,7 +132,7 @@ jobs:
           fi
 
       - name: Schedule self-reboot (before 6h limit)
-        if: inputs.github_token != '' && inputs.preview != 'true'
+        if: inputs.github_token != '' && env.PREVIEW != 'true'
         run: |
           (sleep 21000 && curl -s -X POST \
             -H "Authorization: Bearer ${{ inputs.github_token }}" \
@@ -148,7 +161,7 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          if [[ "${{ inputs.preview }}" == "true" ]]; then
+          if [[ "${{ env.PREVIEW }}" == "true" ]]; then
             VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out];[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
             (while true; do
               if [ -f /tmp/preview_composite.jpg ]; then
@@ -184,7 +197,7 @@ jobs:
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
           VF="[0:v]$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto[out]"
-          if [[ "${{ inputs.preview }}" == "true" ]]; then
+          if [[ "${{ env.PREVIEW }}" == "true" ]]; then
             VF="$VF;[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
             (while true; do
               if [ -f /tmp/preview_composite.jpg ]; then
