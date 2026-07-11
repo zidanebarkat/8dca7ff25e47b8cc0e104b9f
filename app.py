@@ -108,13 +108,13 @@ def log(msg):
         if len(log_buffer) > 200:
             log_buffer[:] = log_buffer[-200:]
 
-def trigger_workflow(source_url, output_url):
+def trigger_workflow(source_url, output_url, preview=False):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
     repo = cfg.get('github_repo') or GITHUB_REPO
     if not token or not owner or not repo:
-        return None, 'Missing GitHub config'
+        return None, None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     inputs = {
@@ -125,12 +125,21 @@ def trigger_workflow(source_url, output_url):
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
+        'preview': 'true' if preview else 'false',
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
-        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
-    return 'triggered', None
+        return None, None, f'GitHub API error: {r.status_code} {r.text[:200]}'
+    # Get the run ID from the workflow runs list
+    runs_url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/runs?per_page=1&event=workflow_dispatch'
+    r2 = requests.get(runs_url, headers=headers)
+    run_id = None
+    if r2.status_code == 200:
+        runs = r2.json().get('workflow_runs', [])
+        if runs:
+            run_id = runs[0]['id']
+    return 'triggered', run_id, None
 
 def trigger_yt_workflow(source_url, youtube_key):
     cfg = load_config()
@@ -394,7 +403,7 @@ def start_stream():
     cfg = load_config()
     if not cfg.get('source_url') or not cfg.get('output_url'):
         return jsonify({'ok': False, 'error': 'Missing source URL or output URL'})
-    msg, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''))
+    msg, run_id, err = trigger_workflow(cfg['source_url'], cfg.get('output_url',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     wanted = True
@@ -743,63 +752,51 @@ def fb_resolve_source():
 def chat_index():
     return HTML_CHAT_PANEL
 
-PREVIEW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview_output')
-os.makedirs(PREVIEW_DIR, exist_ok=True)
-
-def generate_preview():
-    cfg = load_config()
-    ot = cfg.get('overlay_text', 'Stream Preview') or 'Stream Preview'
-    font = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-    if not os.path.exists(font):
-        font = ''
-    out_path = os.path.join(PREVIEW_DIR, 'preview.mp4')
-    tmp_bg = os.path.join(PREVIEW_DIR, 'bg.mp4')
-    tmp_chat = os.path.join(PREVIEW_DIR, 'sim_chat.mp4')
-    tmp_ot = os.path.join(PREVIEW_DIR, 'overlay.txt')
-    with open(tmp_ot, 'w') as f:
-        f.write(ot)
-    try:
-        dur = 10
-        subprocess.run([
-            'ffmpeg', '-f', 'lavfi', '-i', f'color=c=blue:s=1920x1080:d={dur}:r=30',
-            '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono',
-            '-shortest', '-y', tmp_bg
-        ], capture_output=True, timeout=30)
-        subprocess.run([
-            'ffmpeg', '-f', 'lavfi', '-i', f'color=c=green:s=400x600:d={dur}:r=30',
-            '-vf', "drawtext=text='Chat preview':fontsize=24:fontcolor=white:x=10:y=h-80:box=1:boxcolor=black@0.5:boxborderw=6,drawtext=text='User: testing overlay':fontsize=24:fontcolor=white:x=10:y=h-50:box=1:boxcolor=black@0.5:boxborderw=6",
-            '-y', tmp_chat
-        ], capture_output=True, timeout=30)
-        beveled = f"drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile={tmp_ot}:reload=1:fontfile={font}:fontsize=54:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-        vf = f"[0:v]scale=1920:1080,{beveled}[main];[1:v]scale=400:-1,colorkey=0x00ff00:0.2:0.0[over];[main][over]overlay=20:main_h-overlay_h-20[out]"
-        subprocess.run([
-            'ffmpeg', '-nostdin', '-re', '-stream_loop', '-1', '-i', tmp_bg,
-            '-i', tmp_chat,
-            '-filter_complex', vf, '-map', '[out]', '-map', '0:a',
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '2000k',
-            '-c:a', 'aac', '-b:a', '96k', '-t', str(dur), '-y', out_path
-        ], capture_output=True, timeout=60)
-        for f in [tmp_bg, tmp_chat, tmp_ot]:
-            try: os.remove(f)
-            except: pass
-        return out_path
-    except Exception as e:
-        return None
-
 @app.route('/preview')
 def preview_page():
-    out = generate_preview()
-    if out and os.path.exists(out):
-        return PREVIEW_HTML.replace('%VIDEO_URL%', '/preview_video')
-    else:
-        return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Unavailable</h1><p>FFmpeg not available on this server. Trigger the <b>Test Overlay</b> workflow on GitHub instead.</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('github_repo') or GITHUB_REPO
+    if not token or not owner or not repo:
+        return '<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Unavailable</h1><p>Configure GitHub credentials first.</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    msg, run_id, err = trigger_workflow(cfg.get('source_url',''), cfg.get('output_url',''), preview=True)
+    if err:
+        return f'<html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;padding:40px"><h1>Preview Error</h1><p>{err}</p><p><a href="/" style="color:#58a6ff">← Back to panel</a></p></body></html>'
+    return PREVIEW_HTML.replace('%RUN_ID%', str(run_id or '')).replace('%OWNER%', owner).replace('%REPO%', repo)
 
-@app.route('/preview_video')
-def preview_video():
-    p = os.path.join(PREVIEW_DIR, 'preview.mp4')
-    if os.path.exists(p):
-        return open(p, 'rb').read(), 200, {'Content-Type': 'video/mp4'}
-    return 'Not found', 404
+@app.route('/preview/status')
+def preview_status():
+    run_id = request.args.get('run_id')
+    owner = request.args.get('owner')
+    repo = request.args.get('repo')
+    if not run_id or not owner or not repo:
+        return jsonify({'ok': False, 'error': 'Missing params'})
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    r = requests.get(f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}', headers=headers)
+    if r.status_code != 200:
+        return jsonify({'ok': False, 'error': f'API error: {r.status_code}'})
+    data = r.json()
+    conclusion = data.get('conclusion')
+    status = data.get('status')
+    done = status == 'completed'
+    artifact_url = None
+    if done and conclusion == 'success':
+        ar = requests.get(f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', headers=headers)
+        if ar.status_code == 200:
+            arts = ar.json().get('artifacts', [])
+            if arts:
+                artifact_url = f'https://api.github.com/repos/{owner}/{repo}/actions/artifacts/{arts[0]["id"]}/zip'
+    return jsonify({
+        'ok': True,
+        'status': status,
+        'conclusion': conclusion,
+        'done': done,
+        'artifact_url': artifact_url,
+        'html_url': data.get('html_url', ''),
+    })
 
 PREVIEW_HTML = r'''<!DOCTYPE html>
 <html lang="en">
@@ -810,29 +807,79 @@ PREVIEW_HTML = r'''<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.container{text-align:center;padding:20px;max-width:1000px}
+.container{text-align:center;padding:20px;max-width:700px}
 h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
-video{width:100%;max-width:960px;border-radius:8px;border:1px solid #30363d;margin-bottom:20px}
-.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.status-box{padding:30px;background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:20px}
+.spinner{border:3px solid #30363d;border-top:3px solid #58a6ff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-text{font-size:15px;color:#8b949e;margin-top:12px}
+.status-text.running{color:#58a6ff}
+.status-text.success{color:#3fb950}
+.status-text.failed{color:#f85149}
+.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none}
 .btn-green{background:#238636;color:#fff}
 .btn-green:hover{background:#2ea043}
+.btn-red{background:#da3633;color:#fff}
+.btn-red:hover{background:#f85149}
 .btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
 .btn-grey:hover{background:#30363d}
-.note{font-size:13px;color:#8b949e;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.note{font-size:13px;color:#8b949e;margin-top:16px}
 </style>
 </head>
 <body>
 <div class="container">
 <h1>Stream Preview</h1>
-<p style="margin-bottom:16px;color:#8b949e;font-size:14px">This is what your stream output will look like (simulated)</p>
-<video src="%VIDEO_URL%" controls autoplay muted loop></video>
-<div class="actions">
-  <a class="btn btn-green" href="/start" onclick="event.preventDefault();fetch('/start').then(r=>r.json()).then(d=>{if(d.ok)location.href='/';else alert(d.error)})">▶ Looks good, Go Live!</a>
+<div class="status-box" id="mainBox">
+  <div class="spinner" id="spinner"></div>
+  <div class="status-text running" id="statusText">Starting preview workflow on GitHub...</div>
+</div>
+<div class="actions" id="actions" style="display:none">
+  <a class="btn btn-green" id="btnDownload" href="#" download>⬇ Download Preview</a>
+  <a class="btn btn-red" id="btnGoLive" href="/start" onclick="event.preventDefault();fetch('/start').then(r=>r.json()).then(d=>{if(d.ok)location.href='/';else alert(d.error)})">▶ Looks good, Go Live!</a>
   <a class="btn btn-grey" href="/">← Back to panel</a>
 </div>
-<div class="note">Chat messages shown are simulated. Real chat will show live from your channel.</div>
+<div class="note" id="note" style="display:none">30-second preview generated using your current config (overlay text, browser overlay, etc.)</div>
 </div>
+<script>
+const RUN_ID = '%RUN_ID%';
+const OWNER = '%OWNER%';
+const REPO = '%REPO%';
+async function poll() {
+  try {
+    const r = await fetch(`/preview/status?run_id=${RUN_ID}&owner=${OWNER}&repo=${REPO}`);
+    const d = await r.json();
+    if (!d.ok) { document.getElementById('statusText').textContent = 'Error: ' + (d.error||'unknown'); return; }
+    if (d.done) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('actions').style.display = 'flex';
+      document.getElementById('note').style.display = 'block';
+      if (d.conclusion === 'success') {
+        document.getElementById('statusText').className = 'status-text success';
+        document.getElementById('statusText').textContent = 'Preview ready!';
+        if (d.artifact_url) {
+          document.getElementById('btnDownload').href = d.artifact_url;
+        } else {
+          document.getElementById('btnDownload').style.display = 'none';
+        }
+      } else {
+        document.getElementById('statusText').className = 'status-text failed';
+        document.getElementById('statusText').textContent = 'Preview failed (check GitHub for details)';
+        document.getElementById('btnDownload').style.display = 'none';
+        document.getElementById('btnGoLive').style.display = 'none';
+      }
+    } else {
+      document.getElementById('statusText').textContent = 'Running... (this takes ~2 minutes)';
+      setTimeout(poll, 3000);
+    }
+  } catch(e) {
+    document.getElementById('statusText').textContent = 'Connection error, retrying...';
+    setTimeout(poll, 3000);
+  }
+}
+poll();
+</script>
 </body>
 </html>'''
 
