@@ -106,9 +106,13 @@ jobs:
       - name: Start Python chat overlay
         run: |
           mkfifo /tmp/chat_overlay.fifo
+          echo "preview=[${{ inputs.preview }}]" >> /tmp/chat_overlay.log
           FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log"
-          if [ "${{ inputs.preview }}" = "true" ]; then
+          if [[ "${{ inputs.preview }}" == "true" ]]; then
             FLAGS="$FLAGS --simulate"
+            echo "simulate=yes" >> /tmp/chat_overlay.log
+          else
+            echo "simulate=no" >> /tmp/chat_overlay.log
           fi
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             echo "chat=fallback" >> "$GITHUB_ENV"
