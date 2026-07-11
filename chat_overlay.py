@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Python-native Kick chat overlay. Reads Pusher WebSocket, renders via Pillow, writes RGBA frames to FIFO."""
 
-import argparse, json, os, re, signal, sys, threading, time
+import argparse, io, json, os, re, signal, sys, threading, time
 from collections import deque
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -23,6 +24,7 @@ parser.add_argument('--width', type=int, default=400)
 parser.add_argument('--height', type=int, default=600)
 parser.add_argument('--fps', type=int, default=5)
 parser.add_argument('--max-messages', type=int, default=20)
+parser.add_argument('--panel-url', default='', help='Panel URL to POST preview frames to')
 args = parser.parse_args()
 
 WIDTH, HEIGHT = args.width, args.height
@@ -357,6 +359,8 @@ def render_loop():
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     frame_interval = 1.0 / FPS
+    frame_count = 0
+    panel_url = args.panel_url.rstrip('/')
     while running:
         t0 = time.monotonic()
         frame = render_frame(list(messages), draw, FONT, FONT_SM, FONT_USER)
@@ -367,6 +371,15 @@ def render_loop():
         except BrokenPipeError:
             print('chat_overlay: pipe broken, exiting', file=sys.stderr, flush=True)
             break
+        frame_count += 1
+        if panel_url and frame_count % (FPS * 5) == 0:
+            try:
+                buf = BytesIO()
+                frame.save(buf, 'JPEG', quality=70)
+                buf.seek(0)
+                requests.post(f'{panel_url}/preview_frame_upload', files={'frame': ('frame.jpg', buf, 'image/jpeg')}, timeout=5)
+            except Exception as e:
+                print(f'chat_overlay: frame upload error: {e}', file=sys.stderr, flush=True)
         elapsed = time.monotonic() - t0
         sleep_time = frame_interval - elapsed
         if sleep_time > 0:

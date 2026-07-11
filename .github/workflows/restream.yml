@@ -106,7 +106,7 @@ jobs:
       - name: Start Python chat overlay
         run: |
           mkfifo /tmp/chat_overlay.fifo
-          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo"
+          FLAGS="--channel zed-bx --fifo /tmp/chat_overlay.fifo --panel-url https://strwithgit.pythonanywhere.com"
           if [ "${{ inputs.preview }}" = "true" ]; then
             FLAGS="$FLAGS --simulate"
           fi

@@ -863,6 +863,22 @@ def preview_restart():
         f.write(str(run_id or ''))
     return redirect(f'/preview_status_page?run_id={run_id}&owner={owner}&repo={repo}')
 
+PREVIEW_FRAME_PATH = '/tmp/preview_frame.jpg'
+
+@app.route('/preview_frame_upload', methods=['POST'])
+def preview_frame_upload():
+    if 'frame' not in request.files:
+        return 'no frame', 400
+    f = request.files['frame']
+    f.save(PREVIEW_FRAME_PATH)
+    return 'ok'
+
+@app.route('/preview_frame')
+def preview_frame():
+    if os.path.exists(PREVIEW_FRAME_PATH):
+        return open(PREVIEW_FRAME_PATH, 'rb').read(), 200, {'Content-Type': 'image/jpeg'}
+    return '', 404
+
 PREVIEW_HTML = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -890,6 +906,8 @@ h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
 .btn-grey:hover{background:#30363d}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .note{font-size:13px;color:#8b949e;margin-top:16px;line-height:1.5}
+.preview-image{max-width:100%;border-radius:6px;border:1px solid #30363d;margin-top:16px;background:#000}
+.preview-image.hidden{display:none}
 </style>
 </head>
 <body>
@@ -898,6 +916,7 @@ h1{font-size:20px;margin-bottom:16px;color:#f0f6fc}
 <div class="status-box" id="mainBox">
   <div class="spinner" id="spinner"></div>
   <div class="status-text running" id="statusText">Starting preview on GitHub...</div>
+  <img id="previewImage" class="preview-image hidden" src="" alt="Preview output">
 </div>
 <div class="actions" id="actions" style="display:none">
   <button class="btn btn-red" id="btnGoLive" onclick="goLive()">▶ Looks good, Go Live!</button>
@@ -949,6 +968,11 @@ async function poll() {
     staleRetries = 0;
     let status = d.status || 'running';
     document.getElementById('statusText').textContent = status.charAt(0).toUpperCase() + status.slice(1) + '... (' + elapsed + 's)';
+    const img = document.getElementById('previewImage');
+    if (!d.done) {
+      img.src = '/preview_frame?' + Date.now();
+      img.className = 'preview-image';
+    }
     setTimeout(poll, 5000);
   } catch(e) {
     if (elapsed < 20) {
