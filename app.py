@@ -285,9 +285,11 @@ def trigger_fb_now_workflow(source_url, facebook_key):
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = facebook_key if facebook_key.startswith(('rtmp', 'srt')) else f'rtmps://live-api-s.facebook.com:443/rtmp/{facebook_key}'
     cookies_b64 = ''
-    if cfg.get('fb_now_cookies'):
+    raw_cookies = cfg.get('fb_now_cookies', '')
+    log(f'FB-Now: fb_now_cookies in config = {len(raw_cookies)} chars')
+    if raw_cookies:
         import base64, json
-        raw = cfg['fb_now_cookies'].strip()
+        raw = raw_cookies.strip()
         if raw.startswith('['):
             try:
                 cookies = json.loads(raw)
@@ -306,6 +308,7 @@ def trigger_fb_now_workflow(source_url, facebook_key):
             except:
                 pass
         cookies_b64 = base64.b64encode(raw.encode()).decode()
+        log(f'FB-Now: cookies_b64 = {len(cookies_b64)} chars')
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
