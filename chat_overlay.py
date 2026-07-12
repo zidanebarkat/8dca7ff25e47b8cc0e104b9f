@@ -356,7 +356,6 @@ def pusher_thread_func(chatroom_id):
 
 def render_loop():
     overlay_path = args.overlay_path
-    tmp_path = overlay_path + '.tmp'
     log(f'chat_overlay: starting render at {FPS}fps')
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -370,9 +369,11 @@ def render_loop():
             import traceback
             log(traceback.format_exc())
             frame = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
-        try:
-            frame.save(tmp_path, format='PNG')
-            os.replace(tmp_path, overlay_path)
+    try:
+                buf = io.BytesIO()
+                frame.save(buf, format='PNG')
+                with open(overlay_path, 'wb') as f:
+                    f.write(buf.getvalue())
         except Exception as e:
             log(f'chat_overlay: frame write error: {e}')
         elapsed = time.monotonic() - t0
