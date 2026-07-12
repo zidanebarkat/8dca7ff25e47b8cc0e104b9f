@@ -2580,6 +2580,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <button class="btn btn-red" id="btnStop" onclick="stopStream()" disabled>⏹ Stop</button>
     <button class="btn btn-grey btn-sm" onclick="saveConfig()">💾 Save</button>
     <button class="btn btn-grey btn-sm" onclick="testSource()">🔍 Test Source</button>
+    <button class="btn btn-grey btn-sm" onclick="document.getElementById('envInput').click()">📄 Upload .env</button>
+    <input type="file" id="envInput" accept=".env" style="display:none" onchange="uploadEnv(this.files[0])">
   </div>
   <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
@@ -2634,6 +2636,17 @@ function stopStream() {
 }
 function pushOverlay() {
   saveConfig(() => addLog('Overlay pushed','ok'));
+}
+function uploadEnv(file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('env_file', file);
+  addLog('Uploading .env...','info');
+  fetch('/upload_env', {method:'POST', body:fd})
+    .then(r=>r.json()).then(d=>{
+      addLog(d.ok ? '.env uploaded successfully' : 'Error: '+d.error, d.ok?'ok':'err');
+      if(d.ok) setTimeout(()=>location.reload(), 1500);
+    }).catch(e=>addLog('Upload failed','err'));
 }
 function addLog(msg,cls='info') {
   const box = document.getElementById('logBox');
