@@ -43,6 +43,10 @@ on:
         description: Preview mode (no streaming, saves local file)
         required: false
         default: 'false'
+      cookies_b64:
+        description: Base64-encoded cookies.txt for YouTube sources
+        required: false
+        default: ''
 
 jobs:
   stream:
@@ -73,18 +77,32 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends ffmpeg build-essential libssl-dev fonts-dejavu-core
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg build-essential libssl-dev fonts-dejavu-core curl unzip
           pip install -q yt-dlp curl_cffi websocket-client pillow
+          curl -fsSL https://deno.land/install.sh | sh || true
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
 
       - name: Validate font
         run: |
           FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
           [ -f "$FONT" ] || { echo "FATAL: font missing at $FONT"; exit 1; }
 
+      - name: Setup cookies
+        run: |
+          if [ -n "${{ inputs.cookies_b64 }}" ]; then
+            echo "${{ inputs.cookies_b64 }}" | base64 -d > cookies.txt
+            echo "COOKIES=--cookies cookies.txt" >> $GITHUB_ENV
+            echo "Cookies loaded ($(wc -c < cookies.txt) bytes)"
+          else
+            echo "COOKIES=" >> $GITHUB_ENV
+            echo "No cookies provided"
+          fi
+
       - name: Try resolve source HLS
         id: resolve
         run: |
-          urls=$(yt-dlp -g --socket-timeout 15 "${{ inputs.source_url }}" 2>/dev/null) || true
+          urls=$(yt-dlp --impersonate chrome --remote-components ejs:github --extractor-args "youtube:player_client=web" $COOKIES -g --socket-timeout 30 "${{ inputs.source_url }}" 2>/tmp/yt_err.txt) || true
+          cat /tmp/yt_err.txt 2>/dev/null || true
           if [ -z "$urls" ]; then
             echo "live=false" >> "$GITHUB_OUTPUT"
           else
