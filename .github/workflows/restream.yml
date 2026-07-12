@@ -127,6 +127,7 @@ jobs:
           if [ -n "${{ inputs.browser_overlay_url }}" ]; then
             echo "chat=fallback" >> "$GITHUB_ENV"
           else
+            python3 -c "from PIL import Image; Image.new('RGBA',(400,600),(0,0,0,0)).save('/tmp/chat_overlay_frame.png')"
             python3 ${{ github.workspace }}/chat_overlay.py --channel ${{ steps.chat_channel.outputs.channel }} --overlay-path /tmp/chat_overlay_frame.png --log-file /tmp/chat_overlay.log &
             echo "chat=python" >> "$GITHUB_ENV"
             sleep 2
