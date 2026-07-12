@@ -69,6 +69,9 @@ DEFAULTS = {
     'fb_repo': _ENV.get('FB_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_keepalive': False,
     'fb_now_url': '',
+    'fb_now_sources': '',
+    'fb_now_source_index': 0,
+    'fb_now_source_duration': 1800,
     'fb_now_key': '',
     'fb_now_repo': _ENV.get('FB_NOW_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_now_keepalive': False,
@@ -85,6 +88,14 @@ DEFAULTS = {
     'fb_wanted': False,
     'fb_now_wanted': False,
     'fb_now_cookies': '',
+    'fb_now_sources': '',
+    'fb_now_source_index': 0,
+    'fb_now_source_duration': 1800,
+    'fb_now_chat_enabled': False,
+    'fb_live_video_id': '',
+    'fb_chat_token': '',
+    'yt_chat_enabled': False,
+    'youtube_api_key': '',
 }
 
 wanted = False
@@ -194,6 +205,8 @@ def trigger_yt_workflow(source_url, youtube_key):
         'overlay_text': cfg.get('overlay_text', ''),
         'cookies_b64': cookies_b64,
         'github_token': token,
+        'chat_enabled': 'true' if cfg.get('yt_chat_enabled') else 'false',
+        'youtube_api_key': cfg.get('youtube_api_key', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -276,7 +289,7 @@ def trigger_fb_workflow(source_url, facebook_key):
         return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
     return 'triggered', None
 
-def trigger_fb_now_workflow(source_url, facebook_key):
+def trigger_fb_now_workflow(source_url, facebook_key, source_index=0, sources_b64=''):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -317,6 +330,12 @@ def trigger_fb_now_workflow(source_url, facebook_key):
         'overlay_text': cfg.get('overlay_text', ''),
         'cookies_b64': cookies_b64,
         'github_token': token,
+        'source_list_b64': sources_b64,
+        'source_index': str(source_index),
+        'source_duration': str(cfg.get('fb_now_source_duration', 1800)),
+        'chat_enabled': 'true' if cfg.get('fb_now_chat_enabled') else 'false',
+        'fb_live_video_id': cfg.get('fb_live_video_id', ''),
+        'fb_chat_token': cfg.get('fb_chat_token', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -844,23 +863,36 @@ def fb_now_status():
     if token and owner and repo:
         run_id = get_active_run(token, owner, repo)
         live = run_id is not None
-    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('fb_now_keepalive', False), 'wanted': fb_now_wanted})
+    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('fb_now_keepalive', False), 'wanted': fb_now_wanted, 'source_index': cfg.get('fb_now_source_index', 0), 'source_count': len([u.strip() for u in cfg.get('fb_now_sources', '').splitlines() if u.strip()]) or (1 if cfg.get('fb_now_url') else 0)})
 
 @app.route('/fb-now/start')
 def fb_now_start():
     global fb_now_wanted
+    import base64
     cfg = load_config()
-    if not cfg.get('fb_now_url'):
-        return jsonify({'ok': False, 'error': 'Missing source URL'})
+    sources_text = cfg.get('fb_now_sources', '').strip()
+    if sources_text:
+        sources = [u.strip() for u in sources_text.splitlines() if u.strip()]
+    else:
+        src = cfg.get('fb_now_url', '')
+        sources = [src] if src else []
+    if not sources:
+        return jsonify({'ok': False, 'error': 'No source URLs'})
     if not cfg.get('fb_now_key'):
         return jsonify({'ok': False, 'error': 'Missing Facebook stream key'})
-    msg, err = trigger_fb_now_workflow(cfg['fb_now_url'], cfg.get('fb_now_key',''))
+    sources_b64 = base64.b64encode('\n'.join(sources).encode()).decode()
+    source_index = cfg.get('fb_now_source_index', 0) or 0
+    if source_index >= len(sources):
+        source_index = 0
+    current_url = sources[source_index]
+    log(f'FB-Now: playing source {source_index+1}/{len(sources)}: {current_url[:80]}')
+    msg, err = trigger_fb_now_workflow(current_url, cfg.get('fb_now_key',''), source_index, sources_b64)
     if err:
         return jsonify({'ok': False, 'error': err})
     fb_now_wanted = True
-    log('FB-Now workflow triggered')
+    cfg['fb_now_source_index'] = source_index
     save_config(cfg)
-    return jsonify({'ok': True, 'msg': msg})
+    return jsonify({'ok': True, 'msg': msg, 'source_index': source_index, 'total_sources': len(sources)})
 
 @app.route('/fb-now/stop')
 def fb_now_stop():
@@ -879,6 +911,40 @@ def fb_now_stop():
     cancel_workflow(run_id, token, owner, repo)
     log('FB-Now workflow cancelled')
     return jsonify({'ok': True})
+
+@app.route('/fb-now/next')
+def fb_now_next():
+    global fb_now_wanted
+    import base64
+    cfg = load_config()
+    sources_text = cfg.get('fb_now_sources', '').strip()
+    if sources_text:
+        sources = [u.strip() for u in sources_text.splitlines() if u.strip()]
+    else:
+        return jsonify({'ok': False, 'error': 'No source queue'})
+    if not cfg.get('fb_now_key'):
+        return jsonify({'ok': False, 'error': 'Missing Facebook stream key'})
+    current_index = cfg.get('fb_now_source_index', 0) or 0
+    next_index = current_index + 1
+    if next_index >= len(sources):
+        if cfg.get('fb_now_keepalive'):
+            next_index = 0
+            log('FB-Now: queue finished, looping from start')
+        else:
+            log('FB-Now: queue finished, stopping')
+            fb_now_wanted = False
+            save_config(cfg)
+            return jsonify({'ok': True, 'msg': 'Queue finished'})
+    sources_b64 = base64.b64encode('\n'.join(sources).encode()).decode()
+    current_url = sources[next_index]
+    log(f'FB-Now: advancing to source {next_index+1}/{len(sources)}: {current_url[:80]}')
+    msg, err = trigger_fb_now_workflow(current_url, cfg.get('fb_now_key',''), next_index, sources_b64)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    fb_now_wanted = True
+    cfg['fb_now_source_index'] = next_index
+    save_config(cfg)
+    return jsonify({'ok': True, 'msg': msg, 'source_index': next_index, 'total_sources': len(sources)})
 
 @app.route('/fb-now/resolve')
 def fb_now_resolve_source():
@@ -1822,6 +1888,18 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
         <button class="btn btn-grey btn-sm" onclick="pushOverlay()" style="white-space:nowrap">Push Overlay</button>
       </div>
     </div>
+    <div class="form-group" style="margin-top:4px">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="yt_chat_enabled" id="yt_chat_enabled" onchange="saveConfig()" style="width:auto">
+        Enable YouTube Live Chat overlay
+      </label>
+      <div style="font-size:11px;color:#8b949e;margin-left:20px">Shows live chat messages on screen (needs API key below)</div>
+    </div>
+    <div class="form-group">
+      <label>YouTube Data API v3 Key</label>
+      <input type="text" name="youtube_api_key" id="youtube_api_key" placeholder="AIzaSy...">
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">Get from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#58a6ff">Google Cloud Console</a> (enable YouTube Data API v3)</div>
+    </div>
     <div class="form-group">
       <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
       <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
@@ -2554,13 +2632,23 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (YouTube, Twitch, etc.)</label>
-    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="YouTube, Twitch, Kick URL (any live stream)">
+    <label>Source URLs (one per line — plays sequentially, ~30min each)</label>
+    <textarea name="fb_now_sources" id="fb_now_sources" rows="5" placeholder="https://www.youtube.com/watch?v=VIDEO1&#10;https://www.youtube.com/watch?v=VIDEO2&#10;https://www.youtube.com/watch?v=VIDEO3" style="font-family:monospace;font-size:11px"></textarea>
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">Each source plays for the duration below, then auto-advances to next. Leave empty to use single Source URL below.</div>
+  </div>
+  <div class="form-group">
+    <label>Single Source URL (fallback if list above is empty)</label>
+    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="YouTube, Twitch, Kick URL">
   </div>
   <div class="form-group">
     <label>Facebook Stream Key</label>
     <input type="text" name="fb_now_key" id="fb_now_key" placeholder="From facebook.com/live/producer">
     <div style="font-size:11px;color:#8b949e;margin-top:2px">Get it at <a href="https://facebook.com/live/producer" target="_blank" style="color:#58a6ff">facebook.com/live/producer</a></div>
+  </div>
+  <div class="form-group">
+    <label>Source Duration (seconds per source)</label>
+    <input type="number" name="fb_now_source_duration" id="fb_now_source_duration" value="1800" placeholder="1800">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">Default 1800 (30 min). After this time, auto-advances to next source in queue.</div>
   </div>
   <div class="form-group">
     <label>Overlay Text (displayed on stream)</label>
@@ -2572,6 +2660,22 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <div class="form-group">
     <label>YouTube Cookies (for YouTube sources, paste Netscape cookies.txt)</label>
     <textarea name="fb_now_cookies" id="fb_now_cookies" rows="4" placeholder="Paste cookies.txt content here (export from browser)" style="font-family:monospace;font-size:11px"></textarea>
+  </div>
+  <div class="form-group" style="margin-top:4px">
+    <label style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" name="fb_now_chat_enabled" id="fb_now_chat_enabled" onchange="saveConfig()" style="width:auto">
+      Enable Facebook Live Chat overlay
+    </label>
+    <div style="font-size:11px;color:#8b949e;margin-left:20px">Shows live comments from your FB stream on screen</div>
+  </div>
+  <div class="form-group">
+    <label>Facebook Live Video ID</label>
+    <input type="text" name="fb_live_video_id" id="fb_live_video_id" placeholder="From FB live producer page URL">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">Find in the URL: facebook.com/live/producer/VIDEO_ID</div>
+  </div>
+  <div class="form-group">
+    <label>Facebook Chat Access Token</label>
+    <input type="text" name="fb_chat_token" id="fb_chat_token" placeholder="Page access token with pages_read_engagement">
   </div>
   <div class="form-group" style="margin-top:4px">
     <label style="display:flex;align-items:center;gap:8px">
@@ -2663,7 +2767,10 @@ function updateStatus() {
     const txt = document.getElementById('statusText');
     if(d.live) {
       dot.className = 'status-dot live';
-      txt.textContent = '● LIVE' + (d.keepalive ? ' (auto-restart)' : '');
+      let status = '● LIVE';
+      if(d.source_count > 1) status += ` (source ${d.source_index+1}/${d.source_count})`;
+      if(d.keepalive) status += ' (auto-restart)';
+      txt.textContent = status;
       document.getElementById('btnGoLive').disabled = true;
       document.getElementById('btnStop').disabled = false;
     } else {
