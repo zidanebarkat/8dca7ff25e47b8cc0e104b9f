@@ -168,7 +168,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset fast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset veryfast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Fallback restream (live)
         if: steps.resolve.outputs.live != 'true' && inputs.preview != 'true'
@@ -189,7 +189,7 @@ jobs:
             -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png
             -filter_complex "$VF"
             -map '[out]' -map 1:a
-            -c:v libx264 -preset fast
+            -c:v libx264 -preset veryfast
             -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k
             -g 120
             -x264-params "keyint=120:min-keyint=120:level=5.1"
@@ -225,7 +225,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset fast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset veryfast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Live restream (live)
         if: steps.resolve.outputs.live == 'true' && inputs.preview != 'true'
@@ -250,7 +250,7 @@ jobs:
             -stream_loop -1 -f image2 -framerate 5 -i /tmp/chat_overlay_frame.png
             -filter_complex "$VF"
             -map '[out]' -map 0:a
-            -c:v libx264 -preset fast
+            -c:v libx264 -preset veryfast
             -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k
             -g 120
             -x264-params "keyint=120:min-keyint=120:level=5.1"
