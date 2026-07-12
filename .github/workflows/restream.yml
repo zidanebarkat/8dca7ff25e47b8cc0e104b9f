@@ -202,7 +202,7 @@ jobs:
           )
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
-            ARGS+=(-f mpegts "$URL")
+            ARGS+=(-f mpegts -pkt_size 1316 "$URL")
           else
             ARGS+=(-f flv "$URL")
           fi
@@ -271,7 +271,7 @@ jobs:
           )
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
-            ARGS+=(-f mpegts "$URL")
+            ARGS+=(-f mpegts -pkt_size 1316 "$URL")
           else
             ARGS+=(-f flv "$URL")
           fi
