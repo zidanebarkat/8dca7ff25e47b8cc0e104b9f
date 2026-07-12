@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Python-native Kick chat overlay. Renders via Pillow, serves latest frame as PNG over HTTP."""
+"""Python-native Kick chat overlay. Renders via Pillow, writes latest frame atomically to file."""
 
 import argparse, io, json, os, re, signal, sys, threading, time
 from collections import deque
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -18,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 parser = argparse.ArgumentParser(description='Kick chat overlay renderer')
 parser.add_argument('--channel', default='zed-bx')
-parser.add_argument('--port', type=int, default=9090)
+parser.add_argument('--overlay-path', default='/tmp/chat_overlay_frame.png')
 parser.add_argument('--simulate', action='store_true')
 parser.add_argument('--badge-cache', default='/tmp/chat_badges')
 parser.add_argument('--emote-cache', default='/tmp/chat_emotes')
@@ -74,8 +73,6 @@ PAD = 8
 MSG_MARGIN = 4
 messages = deque(maxlen=MAX_MSGS)
 running = True
-latest_frame = None
-frame_lock = threading.Lock()
 
 Path(args.badge_cache).mkdir(parents=True, exist_ok=True)
 Path(args.emote_cache).mkdir(parents=True, exist_ok=True)
@@ -357,26 +354,9 @@ def pusher_thread_func(chatroom_id):
             messages.append(chat_msg)
     ws.close()
 
-class FrameHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        global latest_frame
-        with frame_lock:
-            data = latest_frame
-        if data:
-            self.send_response(200)
-            self.send_header('Content-Type', 'image/png')
-            self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-            self.end_headers()
-            self.wfile.write(data)
-        else:
-            self.send_response(204)
-            self.end_headers()
-    def log_message(self, fmt, *args):
-        pass
-
 def render_loop():
-    global latest_frame
+    overlay_path = args.overlay_path
+    tmp_path = overlay_path + '.tmp'
     log(f'chat_overlay: starting render at {FPS}fps')
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -391,12 +371,10 @@ def render_loop():
             log(traceback.format_exc())
             frame = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
         try:
-            buf = io.BytesIO()
-            frame.save(buf, format='PNG')
-            with frame_lock:
-                latest_frame = buf.getvalue()
+            frame.save(tmp_path, format='PNG')
+            os.replace(tmp_path, overlay_path)
         except Exception as e:
-            log(f'chat_overlay: frame encode error: {e}')
+            log(f'chat_overlay: frame write error: {e}')
         elapsed = time.monotonic() - t0
         sleep_time = frame_interval - elapsed
         if sleep_time > 0:
@@ -438,11 +416,6 @@ if __name__ == '__main__':
             args.simulate = True
         log(f'chat_overlay: resolved chatroom_id={chatroom_id}')
 
-    server = HTTPServer(('127.0.0.1', args.port), FrameHandler)
-    t_http = threading.Thread(target=server.serve_forever, daemon=True)
-    t_http.start()
-    log(f'chat_overlay: HTTP server on http://127.0.0.1:{args.port}/frame.png')
-
     log('chat_overlay: starting')
     t_pusher = None
     if args.simulate:
@@ -453,5 +426,4 @@ if __name__ == '__main__':
         t_pusher.start()
 
     render_loop()
-    server.shutdown()
     log('chat_overlay: exited cleanly')
