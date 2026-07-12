@@ -162,7 +162,6 @@ def trigger_yt_workflow(source_url, youtube_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
