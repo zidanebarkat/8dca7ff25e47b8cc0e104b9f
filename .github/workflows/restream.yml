@@ -206,15 +206,7 @@ jobs:
           else
             ARGS+=(-f flv "$URL")
           fi
-          ffmpeg "${ARGS[@]}" || {
-            echo "Restream failed, recreating FIFO and retrying once..."
-            rm -f /tmp/chat_overlay.fifo && mkfifo /tmp/chat_overlay.fifo
-            if ! ps aux | grep -q "[c]hat_overlay.py"; then
-              python3 ${{ github.workspace }}/chat_overlay.py --channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log &
-              sleep 2
-            fi
-            ffmpeg "${ARGS[@]}"
-          }
+          ffmpeg "${ARGS[@]}"
 
       - name: Live restream (preview)
         if: steps.resolve.outputs.live == 'true' && inputs.preview == 'true'
@@ -275,12 +267,4 @@ jobs:
           else
             ARGS+=(-f flv "$URL")
           fi
-          ffmpeg "${ARGS[@]}" || {
-            echo "Restream failed, recreating FIFO and retrying once..."
-            rm -f /tmp/chat_overlay.fifo && mkfifo /tmp/chat_overlay.fifo
-            if ! ps aux | grep -q "[c]hat_overlay.py"; then
-              python3 ${{ github.workspace }}/chat_overlay.py --channel ${{ steps.chat_channel.outputs.channel }} --fifo /tmp/chat_overlay.fifo --log-file /tmp/chat_overlay.log &
-              sleep 2
-            fi
-            ffmpeg "${ARGS[@]}"
-          }
+          ffmpeg "${ARGS[@]}"
