@@ -92,6 +92,7 @@ yt_wanted = False
 twt_wanted = False
 tt_wanted = False
 fb_wanted = False
+fb_now_wanted = False
 
 def load_config():
     try:
@@ -101,12 +102,13 @@ def load_config():
         return dict(DEFAULTS)
 
 def save_config(cfg):
-    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted
+    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted, fb_now_wanted
     cfg['kick_wanted'] = wanted
     cfg['yt_wanted'] = yt_wanted
     cfg['twt_wanted'] = twt_wanted
     cfg['tt_wanted'] = tt_wanted
     cfg['fb_wanted'] = fb_wanted
+    cfg['fb_now_wanted'] = fb_now_wanted
     with open(config_path, 'w') as f:
         json.dump(cfg, f)
 
