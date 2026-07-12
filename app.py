@@ -157,12 +157,14 @@ def trigger_yt_workflow(source_url, youtube_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    output_url = youtube_key if youtube_key.startswith('rtmp') else f'rtmp://a.rtmp.youtube.com/live2/{youtube_key}'
     inputs = {
         'source_url': source_url,
-        'youtube_key': youtube_key,
+        'output_url': output_url,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
@@ -179,18 +181,16 @@ def trigger_twt_workflow(source_url, twitch_key):
     repo = cfg.get('twt_repo') or '8dca7ff25e47b8cc0e104b9f-twt'
     if not token or not owner or not repo:
         return None, 'Missing GitHub config'
-    owner = cfg.get('github_owner') or GITHUB_OWNER
-    repo = cfg.get('twt_repo') or '8dca7ff25e47b8cc0e104b9f-twt'
-    if not token or not owner or not repo:
-        return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    output_url = twitch_key if twitch_key.startswith(('rtmp', 'srt')) else f'rtmp://live.twitch.tv/app/{twitch_key}'
     inputs = {
         'source_url': source_url,
-        'twitch_key': twitch_key,
+        'output_url': output_url,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
@@ -209,12 +209,14 @@ def trigger_tt_workflow(source_url, tiktok_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    output_url = tiktok_key if tiktok_key.startswith(('rtmp', 'srt')) else f'rtmp://push-fs-hsc.pull-ttok.com/ingest/{tiktok_key}'
     inputs = {
         'source_url': source_url,
-        'tiktok_key': tiktok_key,
+        'output_url': output_url,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
@@ -233,12 +235,14 @@ def trigger_fb_workflow(source_url, facebook_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    output_url = facebook_key if facebook_key.startswith(('rtmp', 'srt')) else f'rtmps://live-api-s.facebook.com:443/rtmp/{facebook_key}'
     inputs = {
         'source_url': source_url,
-        'facebook_key': facebook_key,
+        'output_url': output_url,
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
+        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
