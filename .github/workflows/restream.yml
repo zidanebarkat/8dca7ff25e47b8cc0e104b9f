@@ -27,6 +27,10 @@ on:
         description: Overlay text on video
         required: false
         default: ''
+      overlay_channel:
+        description: Kick channel for chat overlay
+        required: false
+        default: 'zed-bx'
       browser_overlay_url:
         description: Browser overlay URL (chat, alerts, etc.)
         required: false
@@ -118,9 +122,14 @@ jobs:
       - name: Extract chat channel
         id: chat_channel
         run: |
-          url="${{ inputs.source_url }}"
-          channel=$(echo "$url" | sed 's|/$||' | awk -F/ '{print $NF}' | grep -oP '^[a-zA-Z0-9_-]+' || echo "")
-          echo "channel=${channel:-zed-bx}" >> "$GITHUB_OUTPUT"
+          OC="${{ inputs.overlay_channel }}"
+          if [ -n "$OC" ]; then
+            echo "channel=$OC" >> "$GITHUB_OUTPUT"
+          else
+            url="${{ inputs.source_url }}"
+            channel=$(echo "$url" | sed 's|/$||' | awk -F/ '{print $NF}' | grep -oP '^[a-zA-Z0-9_-]+' || echo "")
+            echo "channel=${channel:-zed-bx}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Start Python chat overlay
         run: |
@@ -147,6 +156,7 @@ jobs:
               "source_url":"${{ inputs.source_url }}",
               "output_url":"${{ inputs.output_url }}",
               "overlay_text":"${{ inputs.overlay_text }}",
+              "overlay_channel":"${{ inputs.overlay_channel }}",
               "browser_overlay_url":"${{ inputs.browser_overlay_url }}",
               "fallback_video":"${{ inputs.fallback_video }}",
               "fallback_playlist":"${{ inputs.fallback_playlist }}",
