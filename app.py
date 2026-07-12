@@ -316,7 +316,9 @@ def trigger_fb_now_workflow(source_url, facebook_key):
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
         return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
-    return 'triggered', None(run_id, token, owner, repo):
+    return 'triggered', None
+
+def cancel_workflow(run_id, token, owner, repo):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/cancel'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     r = requests.post(url, headers=headers)
