@@ -137,6 +137,9 @@ def render_frame(messages, draw, font, font_sm, font_user):
     img = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     y = HEIGHT - PAD
+    if not messages:
+        draw.rectangle([0, HEIGHT - LINE_HEIGHT - PAD, WIDTH, HEIGHT - PAD], fill=(0, 0, 0, 160))
+        draw.text((PAD, HEIGHT - LINE_HEIGHT - PAD + (LINE_HEIGHT - 13) // 2), f'Chat — {args.channel}', fill='#666666', font=font_sm)
     for msg in reversed(messages):
         username = msg.get('username', '?')
         color = msg.get('color', '#FFFFFF')
