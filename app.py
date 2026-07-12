@@ -124,10 +124,8 @@ def trigger_workflow(source_url, output_url, preview=False):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
-        'preview': 'true' if preview else 'false',
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -190,7 +188,6 @@ def trigger_twt_workflow(source_url, twitch_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
@@ -216,7 +213,6 @@ def trigger_tt_workflow(source_url, tiktok_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
@@ -242,7 +238,6 @@ def trigger_fb_workflow(source_url, facebook_key):
         'fallback_video': cfg.get('fallback_video', ''),
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'overlay_channel': cfg.get('overlay_channel', 'zed-bx'),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
