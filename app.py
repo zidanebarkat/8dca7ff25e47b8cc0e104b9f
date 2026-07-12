@@ -159,10 +159,7 @@ def trigger_yt_workflow(source_url, youtube_key):
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
