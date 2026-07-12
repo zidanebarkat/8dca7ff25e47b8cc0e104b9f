@@ -84,6 +84,7 @@ DEFAULTS = {
     'tt_wanted': False,
     'fb_wanted': False,
     'fb_now_wanted': False,
+    'fb_now_cookies': '',
 }
 
 wanted = False
@@ -455,9 +456,7 @@ def update_config():
         return jsonify(load_config())
     data = request.get_json(force=True)
     cfg = load_config()
-    for k in DEFAULTS:
-        if k in data:
-            cfg[k] = data[k]
+    cfg.update(data)
     save_config(cfg)
     return jsonify({'ok': True, 'config': cfg})
 
