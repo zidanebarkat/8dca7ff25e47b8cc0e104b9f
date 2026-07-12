@@ -172,7 +172,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Fallback restream (live)
         if: steps.resolve.outputs.live != 'true' && inputs.preview != 'true'
@@ -194,7 +194,7 @@ jobs:
             -filter_complex "$VF"
             -map '[out]' -map 1:a
             -c:v libx264 -preset ultrafast
-            -b:v 4500k -maxrate 4500k -bufsize 9000k
+            -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k
             -g 120
             -x264-params "keyint=120:min-keyint=120:scenecut=0"
             -pix_fmt yuv420p
@@ -237,7 +237,7 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -b:v 4500k -maxrate 4500k -bufsize 9000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay.fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 120 -x264-params "keyint=120:min-keyint=120:scenecut=0" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
 
       - name: Live restream (live)
         if: steps.resolve.outputs.live == 'true' && inputs.preview != 'true'
@@ -263,7 +263,7 @@ jobs:
             -filter_complex "$VF"
             -map '[out]' -map 0:a
             -c:v libx264 -preset ultrafast
-            -b:v 4500k -maxrate 4500k -bufsize 9000k
+            -r 60 -b:v 8000k -maxrate 8000k -bufsize 16000k
             -g 120
             -x264-params "keyint=120:min-keyint=120:scenecut=0"
             -pix_fmt yuv420p
