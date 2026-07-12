@@ -1139,7 +1139,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <h2>Stream Config</h2>
   <div class="form-group">
     <label>Source URL</label>
-    <input type="url" name="source_url" id="source_url" placeholder="https://www.twitch.tv/streamer">
+    <input type="url" name="source_url" id="source_url" placeholder="YouTube, Twitch, Kick URL (any live stream)">
   </div>
   <div class="form-group">
     <label>Stream Title</label>
