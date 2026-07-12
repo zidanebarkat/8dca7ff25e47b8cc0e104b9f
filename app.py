@@ -159,8 +159,26 @@ def trigger_yt_workflow(source_url, youtube_key):
     output_url = youtube_key if youtube_key.startswith('rtmp') else f'rtmp://a.rtmp.youtube.com/live2/{youtube_key}'
     cookies_b64 = ''
     if cfg.get('yt_cookies'):
-        import base64
-        cookies_b64 = base64.b64encode(cfg['yt_cookies'].encode()).decode()
+        import base64, json
+        raw = cfg['yt_cookies'].strip()
+        if raw.startswith('['):
+            try:
+                cookies = json.loads(raw)
+                lines = ['# Netscape HTTP Cookie File']
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expirationDate', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                raw = '\n'.join(lines) + '\n'
+            except:
+                pass
+        cookies_b64 = base64.b64encode(raw.encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
