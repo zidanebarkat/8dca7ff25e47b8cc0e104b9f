@@ -82,7 +82,7 @@ def cache_get(cache_dir, key, url):
     if path.exists():
         return Image.open(path).convert('RGBA')
     try:
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, impersonate='chrome', timeout=10)
         if r.status_code == 200:
             path.write_bytes(r.content)
             return Image.open(path).convert('RGBA')
@@ -393,19 +393,17 @@ if __name__ == '__main__':
     chatroom_id = None
     if not args.simulate:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            r = requests.get(f'https://kick.com/api/v2/channels/{args.channel}', headers=headers, timeout=15)
+            r = requests.get(f'https://kick.com/api/v2/channels/{args.channel}', impersonate='chrome', timeout=15)
             if r.status_code == 200:
                 chatroom_id = r.json().get('chatroom', {}).get('id')
             else:
                 print(f'chat_overlay: API returned {r.status_code}, using fallback resolution', file=sys.stderr, flush=True)
         except Exception as e:
-            log(f'chat_overlay: API error: {e}, using fallback resolution')
+            log(f'chat_overlay: API error: {e}, using fallback')
 
         if not chatroom_id:
             try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-                r = requests.get(f'https://kick.com/api/v2/channels/{args.channel}/chatroom', headers=headers, timeout=15)
+                r = requests.get(f'https://kick.com/api/v2/channels/{args.channel}/chatroom', impersonate='chrome', timeout=15)
                 if r.status_code == 200:
                     chatroom_id = r.json().get('id')
             except:
