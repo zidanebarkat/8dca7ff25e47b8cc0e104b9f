@@ -194,7 +194,12 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          for attempt in $(seq 1 50); do
+            echo "=== Stream attempt $attempt at $(date) ==="
+            ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg && break
+            echo "ffmpeg exited with code $?, restarting in 5s..."
+            sleep 5
+          done
 
       - name: Fallback restream (live)
         if: steps.resolve.outputs.live != 'true' && inputs.preview != 'true'
@@ -228,7 +233,12 @@ jobs:
           else
             ARGS+=(-f flv "$URL")
           fi
-          ffmpeg "${ARGS[@]}"
+          for attempt in $(seq 1 50); do
+            echo "=== Stream attempt $attempt at $(date) ==="
+            ffmpeg "${ARGS[@]}" && break
+            echo "ffmpeg exited with code $?, restarting in 5s..."
+            sleep 5
+          done
 
       - name: Live restream (preview)
         if: steps.resolve.outputs.live == 'true' && inputs.preview == 'true'
@@ -251,7 +261,12 @@ jobs:
             fi
             sleep 3
           done) &
-          ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg
+          for attempt in $(seq 1 50); do
+            echo "=== Stream attempt $attempt at $(date) ==="
+            ffmpeg -nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg && break
+            echo "ffmpeg exited with code $?, restarting in 5s..."
+            sleep 5
+          done
 
       - name: Live restream (live)
         if: steps.resolve.outputs.live == 'true' && inputs.preview != 'true'
@@ -289,4 +304,9 @@ jobs:
           else
             ARGS+=(-f flv "$URL")
           fi
-          ffmpeg "${ARGS[@]}"
+          for attempt in $(seq 1 50); do
+            echo "=== Stream attempt $attempt at $(date) ==="
+            ffmpeg "${ARGS[@]}" && break
+            echo "ffmpeg exited with code $?, restarting in 5s..."
+            sleep 5
+          done
