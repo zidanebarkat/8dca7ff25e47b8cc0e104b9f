@@ -50,6 +50,7 @@ DEFAULTS = {
     'keepalive': False,
     'yt_url': _ENV.get('YT_URL', 'https://www.twitch.tv/kaicenat'),
     'yt_key': _ENV.get('YT_KEY', ''),
+    'yt_cookies': '',
     'yt_repo': _ENV.get('YT_REPO', '8dca7ff25e47b8cc0e104b9f-yt'),
     'yt_keepalive': False,
     'twt_url': _ENV.get('TWT_URL', 'https://www.twitch.tv/kaicenat'),
@@ -156,10 +157,15 @@ def trigger_yt_workflow(source_url, youtube_key):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = youtube_key if youtube_key.startswith('rtmp') else f'rtmp://a.rtmp.youtube.com/live2/{youtube_key}'
+    cookies_b64 = ''
+    if cfg.get('yt_cookies'):
+        import base64
+        cookies_b64 = base64.b64encode(cfg['yt_cookies'].encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
         'overlay_text': cfg.get('overlay_text', ''),
+        'cookies_b64': cookies_b64,
         'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
@@ -1666,6 +1672,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <div class="form-group">
     <label>YouTube Stream Key</label>
     <input type="text" name="yt_key" id="yt_key" placeholder="xxxx-xxxx-xxxx-xxxx">
+  </div>
+  <div class="form-group">
+    <label>YouTube Cookies (paste Netscape cookies.txt content)</label>
+    <textarea name="yt_cookies" id="yt_cookies" rows="4" placeholder="Paste cookies.txt content here (export from browser using Get cookies.txt extension)" style="font-family:monospace;font-size:11px"></textarea>
   </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
