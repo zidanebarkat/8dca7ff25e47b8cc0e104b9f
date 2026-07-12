@@ -799,8 +799,7 @@ def fb_start():
 @app.route('/facebook/stop')
 def fb_stop():
     global fb_wanted
-fb_wanted = False
-fb_now_wanted = False
+    fb_wanted = False
     cfg = load_config()
     save_config(cfg)
     token = cfg.get('github_token')
