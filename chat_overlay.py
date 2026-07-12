@@ -369,11 +369,11 @@ def render_loop():
             import traceback
             log(traceback.format_exc())
             frame = Image.new('RGBA', (WIDTH, HEIGHT), (0, 0, 0, 0))
-    try:
-                buf = io.BytesIO()
-                frame.save(buf, format='PNG')
-                with open(overlay_path, 'wb') as f:
-                    f.write(buf.getvalue())
+        try:
+            buf = io.BytesIO()
+            frame.save(buf, format='PNG')
+            with open(overlay_path, 'wb') as f:
+                f.write(buf.getvalue())
         except Exception as e:
             log(f'chat_overlay: frame write error: {e}')
         elapsed = time.monotonic() - t0
