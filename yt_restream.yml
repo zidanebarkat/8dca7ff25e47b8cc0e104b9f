@@ -1,0 +1,229 @@
+name: YT Restream
+on:
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: Source URL (YouTube, Twitch, etc.)
+        required: true
+      output_url:
+        description: YouTube RTMP URL
+        required: true
+      overlay_text:
+        description: Overlay text on stream
+        required: false
+        default: ''
+      cookies_b64:
+        description: Base64-encoded cookies.txt for YouTube
+        required: false
+        default: ''
+      github_token:
+        description: GitHub PAT for self-trigger
+        required: false
+        default: ''
+      chat_enabled:
+        description: Enable live chat overlay on stream
+        required: false
+        default: 'false'
+      youtube_api_key:
+        description: YouTube Data API v3 key for live chat
+        required: false
+        default: ''
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg fonts-dejavu-core curl unzip
+          pip install -q yt-dlp curl_cffi
+          curl -fsSL https://deno.land/install.sh | sh || true
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
+
+      - name: Setup cookies
+        run: |
+          if [ -n "${{ inputs.cookies_b64 }}" ]; then
+            echo "${{ inputs.cookies_b64 }}" | base64 -d > cookies.txt
+            echo "COOKIES=--cookies cookies.txt" >> $GITHUB_ENV
+            echo "Cookies loaded ($(wc -c < cookies.txt) bytes)"
+          else
+            echo "COOKIES=" >> $GITHUB_ENV
+            echo "No cookies provided, trying without"
+          fi
+
+      - name: Resolve source
+        id: resolve
+        run: |
+          echo "=== Trying live HLS first ==="
+          urls=$(yt-dlp --impersonate chrome --remote-components ejs:github --extractor-args "youtube:player_client=web" $COOKIES -g --socket-timeout 30 "${{ inputs.source_url }}" 2>/tmp/yt_err.txt) || true
+          cat /tmp/yt_err.txt
+          if [ -n "$urls" ]; then
+            count=$(echo "$urls" | wc -l)
+            if [ "$count" -ge 2 ]; then
+              echo "video_url=$(echo "$urls" | head -1)" >> "$GITHUB_OUTPUT"
+              echo "audio_url=$(echo "$urls" | sed -n '2p')" >> "$GITHUB_OUTPUT"
+              echo "has_separate_audio=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "video_url=$urls" >> "$GITHUB_OUTPUT"
+              echo "audio_url=" >> "$GITHUB_OUTPUT"
+              echo "has_separate_audio=false" >> "$GITHUB_OUTPUT"
+            fi
+            echo "mode=stream" >> "$GITHUB_OUTPUT"
+            echo "live=true" >> "$GITHUB_OUTPUT"
+            echo "Resolved as live stream"
+          else
+            echo "=== Not live, downloading video ==="
+            yt-dlp --impersonate chrome --remote-components ejs:github --extractor-args "youtube:player_client=web" $COOKIES \
+              -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best" \
+              --merge-output-format mp4 -o "source_video.mp4" \
+              "${{ inputs.source_url }}" 2>&1 || true
+            if [ -f "source_video.mp4" ] && [ -s "source_video.mp4" ]; then
+              echo "mode=download" >> "$GITHUB_OUTPUT"
+              echo "live=true" >> "$GITHUB_OUTPUT"
+              echo "Downloaded video: $(ls -lh source_video.mp4 | awk '{print $5}')"
+            else
+              echo "live=false" >> "$GITHUB_OUTPUT"
+              echo "ERROR: Failed to resolve or download source"
+              exit 1
+            fi
+          fi
+
+      - name: Overlay text updater
+        if: inputs.overlay_text != ''
+        run: |
+          FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+          echo "${{ inputs.overlay_text }}" > overlay.txt
+          (while true; do
+            curl -s "https://strwithgit.pythonanywhere.com/config" | python3 -c "import sys,json; print(json.load(sys.stdin).get('overlay_text',''))" > overlay.txt 2>/dev/null || true
+            sleep 10
+          done) &
+
+      - name: Start chat renderer
+        if: inputs.chat_enabled == 'true' && inputs.youtube_api_key != ''
+        run: |
+          echo " " > chat.txt
+          pip install -q requests 2>/dev/null || true
+          python3 $GITHUB_WORKSPACE/chat_renderer.py \
+            --platform youtube \
+            --video-id "${{ inputs.source_url }}" \
+            --api-key "${{ inputs.youtube_api_key }}" \
+            --output chat.txt \
+            --max-messages 5 \
+            --poll-interval 3 &
+          echo "YouTube chat renderer started"
+
+      - name: Schedule self-reboot
+        if: inputs.github_token != ''
+        run: |
+          TRIGGER_WORKFLOW() {
+            curl -s -X POST \
+              -H "Authorization: Bearer ${{ inputs.github_token }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/restream.yml/dispatches" \
+              -d '{"ref":"main","inputs":{
+                "source_url":"${{ inputs.source_url }}",
+                "output_url":"${{ inputs.output_url }}",
+                "overlay_text":"${{ inputs.overlay_text }}",
+                "cookies_b64":"${{ inputs.cookies_b64 }}",
+                "github_token":"${{ inputs.github_token }}"
+              }}'
+          }
+          (sleep 20400 && for i in 1 2 3; do
+            echo "Self-reboot attempt $i..."
+            RESP=$(TRIGGER_WORKFLOW)
+            echo "$RESP"
+            if echo "$RESP" | grep -q '"id"'; then
+              echo "Self-reboot triggered"
+              break
+            fi
+            sleep 30
+          done) &
+
+      - name: Stream to YouTube
+        run: |
+          MODE="${{ steps.resolve.outputs.mode }}"
+          OT="${{ inputs.overlay_text }}"
+          FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+          CHAT="${{ inputs.chat_enabled }}"
+          echo "$OT" > overlay.txt
+
+          CHAT_FILTER=""
+          if [ "$CHAT" = "true" ]; then
+            echo " " > chat.txt
+            CHAT_FILTER=",drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=h*0.018:fontcolor=white:x=10:y=h-th-80:shadowcolor=black@0.7:shadowx=1:shadowy=1"
+            echo "Chat overlay enabled"
+          fi
+
+          if [ "$MODE" = "download" ]; then
+            echo "=== Streaming downloaded file (loop) ==="
+            for attempt in $(seq 1 50); do
+              echo "=== Stream attempt $attempt at $(date) ==="
+              if [ -n "$OT" ]; then
+                ffmpeg -nostdin -re -stream_loop -1 -i source_video.mp4 \
+                  -filter_complex "[0:v]drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.04:fontcolor=white:x=(w-text_w)/2:y=h-th-20:shadowcolor=black@0.8:shadowx=3:shadowy=3${CHAT_FILTER},format=yuv420p[out]" \
+                  -map "[out]" -map 0:a \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              elif [ "$CHAT" = "true" ]; then
+                ffmpeg -nostdin -re -stream_loop -1 -i source_video.mp4 \
+                  -filter_complex "[0:v]drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=h*0.018:fontcolor=white:x=10:y=h-th-80:shadowcolor=black@0.7:shadowx=1:shadowy=1,format=yuv420p[out]" \
+                  -map "[out]" -map 0:a \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              else
+                ffmpeg -nostdin -re -stream_loop -1 -i source_video.mp4 \
+                  -map 0:v -map 0:a \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              fi
+              echo "ffmpeg exited with code $?, restarting in 5s..."
+              sleep 5
+            done
+          else
+            echo "=== Streaming live HLS ==="
+            PWL="file,http,https,tcp,tls,crypto,srt,rtmp,rtmps"
+            VIDEO_URL="${{ steps.resolve.outputs.video_url }}"
+            AUDIO_URL="${{ steps.resolve.outputs.audio_url }}"
+            HAS_SEP="${{ steps.resolve.outputs.has_separate_audio }}"
+
+            for attempt in $(seq 1 50); do
+              echo "=== Stream attempt $attempt at $(date) ==="
+              INPUTS=(-nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$VIDEO_URL")
+              if [ "$HAS_SEP" = "true" ] && [ -n "$AUDIO_URL" ]; then
+                INPUTS+=(-i "$AUDIO_URL")
+                AMAP="-map 1:a"
+              else
+                AMAP="-map 0:a"
+              fi
+              if [ -n "$OT" ]; then
+                ffmpeg "${INPUTS[@]}" \
+                  -filter_complex "[0:v]drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.04:fontcolor=white:x=(w-text_w)/2:y=h-th-20:shadowcolor=black@0.8:shadowx=3:shadowy=3${CHAT_FILTER},format=yuv420p[out]" \
+                  -map "[out]" $AMAP \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              elif [ "$CHAT" = "true" ]; then
+                ffmpeg "${INPUTS[@]}" \
+                  -filter_complex "[0:v]drawtext=textfile=chat.txt:reload=1:fontfile=$FONT:fontsize=h*0.018:fontcolor=white:x=10:y=h-th-80:shadowcolor=black@0.7:shadowx=1:shadowy=1,format=yuv420p[out]" \
+                  -map "[out]" $AMAP \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              else
+                ffmpeg "${INPUTS[@]}" \
+                  -map 0:v $AMAP \
+                  -c:v libx264 -preset fast -r 30 -b:v 4500k -maxrate 4500k -bufsize 9000k -g 60 \
+                  -x264-params "keyint=60:min-keyint=60" -c:a aac -b:a 128k \
+                  -f flv "${{ inputs.output_url }}" && break
+              fi
+              echo "ffmpeg exited with code $?, restarting in 5s..."
+              sleep 5
+            done
+          fi

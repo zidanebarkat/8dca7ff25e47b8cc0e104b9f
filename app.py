@@ -109,9 +109,6 @@ DEFAULTS = {
     'kick_chill_url': '',
     'kick_chill_key': '',
     'kick_chill_keepalive': False,
-    'fallback_enabled': False,
-    'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
-    'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
     'overlay_text': '',
     'browser_overlay_url': '',
     'cookies_b64': '',
@@ -178,8 +175,6 @@ def trigger_workflow(source_url, output_url, preview=False):
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
@@ -285,8 +280,6 @@ def trigger_twt_workflow(source_url, twitch_key):
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'cookies_b64': cookies_b64,
@@ -357,8 +350,6 @@ def trigger_fb_workflow(source_url, facebook_key):
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
@@ -462,8 +453,6 @@ def trigger_kick_chill_workflow(source_url, kick_key):
         'overlay_text': cfg.get('overlay_text', ''),
         'cookies_b64': cookies_b64,
         'github_token': token,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -675,8 +664,6 @@ def do_resolve(url, cfg):
                     return lines[-1], False
         except:
             pass
-    if cfg.get('fallback_enabled') and cfg.get('fallback_video'):
-        return cfg['fallback_video'], True
     return None, False
 
 @app.route('/resolve')
@@ -1536,28 +1523,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   </div>
 </div>
 <div class="card">
-  <h2>Fallback (when source is offline)</h2>
-  <div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
-      Enable fallback background
-    </label>
-  </div>
-  <div class="form-group">
-    <label>Background Video URL</label>
-    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
-  </div>
-  <div class="form-group">
-    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
-    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
-    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
-  </div>
-</div>
-
-<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -1655,9 +1620,7 @@ function fetchFMAtracks() {
   fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
       if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
-      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
       addLog('Loaded '+d.count+' tracks from FMA','ok');
-      saveConfig();
     }).catch(e=>addLog('Fetch failed','err'));
 }
 function updateStatus() {
@@ -1831,27 +1794,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
-  <h2>Fallback (when source is offline)</h2>
-  <div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
-      Enable fallback background
-    </label>
-  </div>
-  <div class="form-group">
-    <label>Background Video URL</label>
-    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
-  </div>
-  <div class="form-group">
-    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
-    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
-    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
-  </div>
-</div>
-<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -1934,7 +1876,6 @@ function fetchFMAtracks() {
   fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
       if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
-      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
       addLog('Loaded '+d.count+' tracks from FMA','ok');
       saveConfig();
     }).catch(e=>addLog('Fetch failed','err'));
@@ -2106,27 +2047,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
-  <h2>Fallback (when source is offline)</h2>
-  <div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
-      Enable fallback background
-    </label>
-  </div>
-  <div class="form-group">
-    <label>Background Video URL</label>
-    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
-  </div>
-  <div class="form-group">
-    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
-    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
-    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
-  </div>
-</div>
-<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -2201,7 +2121,6 @@ function fetchFMAtracks() {
   fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
       if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
-      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
       addLog('Loaded '+d.count+' tracks from FMA','ok');
       saveConfig();
     }).catch(e=>addLog('Fetch failed','err'));
@@ -2360,27 +2279,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
-  <h2>Fallback (when source is offline)</h2>
-  <div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
-      Enable fallback background
-    </label>
-  </div>
-  <div class="form-group">
-    <label>Background Video URL</label>
-    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
-  </div>
-  <div class="form-group">
-    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
-    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
-    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
-  </div>
-</div>
-<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -2453,7 +2351,6 @@ function fetchFMAtracks() {
   fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
       if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
-      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
       addLog('Loaded '+d.count+' tracks from FMA','ok');
       saveConfig();
     }).catch(e=>addLog('Fetch failed','err'));
@@ -2607,27 +2504,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
 <div class="card">
-  <h2>Fallback (when source is offline)</h2>
-  <div class="form-group">
-    <label style="display:flex;align-items:center;gap:8px">
-      <input type="checkbox" name="fallback_enabled" id="fallback_enabled" onchange="saveConfig()" style="width:auto">
-      Enable fallback background
-    </label>
-  </div>
-  <div class="form-group">
-    <label>Background Video URL</label>
-    <input type="url" name="fallback_video" id="fallback_video" placeholder="https://cdn.pixabay.com/video/...">
-  </div>
-  <div class="form-group">
-    <label>Music Playlist (one URL per line — MP3, YouTube, SoundCloud, or FMA album link)</label>
-    <textarea name="fallback_playlist" id="fallback_playlist" rows="3" placeholder="https://files.freemusicarchive.org/..."></textarea>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="url" id="fmaUrl" placeholder="https://freemusicarchive.org/music/..." style="flex:1;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px">
-    <button class="btn btn-grey btn-sm" onclick="fetchFMAtracks()">Fetch from FMA</button>
-  </div>
-</div>
-<div class="card">
   <h2>Logs</h2>
   <div class="log-box" id="logBox">Waiting...</div>
 </div>
@@ -2697,7 +2573,6 @@ function fetchFMAtracks() {
   fetch('/fma_parse', {method:'POST', body:JSON.stringify({url}), headers:{'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
       if (!d.ok) { addLog('Error: '+d.error,'err'); return; }
-      document.getElementById('fallback_playlist').value = d.tracks.join('\n');
       addLog('Loaded '+d.count+' tracks from FMA','ok');
       saveConfig();
     }).catch(e=>addLog('Fetch failed','err'));

@@ -8,21 +8,6 @@ on:
       output_url:
         description: Kick RTMP/SRT URL
         required: true
-      fallback_video:
-        description: Fallback Video URL
-        required: false
-        default: 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'
-      fallback_playlist:
-        description: Fallback Music Playlist
-        required: false
-        default: |-
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/3CujPNW3YlSqNkWQSgsgysHBl1YPOXRsqBTX2gh0.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/hMRyjksozJqHXKTqLJLjhV9dVMNMywBPJIGhzEFh.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Lq2CptklJpFylGJ8xFTGf9Ao6wzrNu6qkZY1wmgb.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/I0x2w0gQdIqJ8WX6qkbn2j7OPWZhJqsncWBvOaf7.mp3
-          https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wUFY7RnCiQIfvL3FAlyKRifL7wxYF4LN6Trb6aOh.mp3
       overlay_text:
         description: Overlay text on video
         required: false
@@ -56,16 +41,6 @@ jobs:
       PREVIEW: ${{ inputs.preview }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Debug preview value
-        run: |
-          echo "PREVIEW env = [$PREVIEW]"
-          echo "inputs.preview = [${{ inputs.preview }}]"
-          if [[ "$PREVIEW" == "true" ]]; then
-            echo "PREVIEW is true"
-          else
-            echo "PREVIEW is not true"
-          fi
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -137,35 +112,9 @@ jobs:
           if [ -f "source_video.mp4" ] && [ -s "source_video.mp4" ]; then
             echo "Downloaded: $(ls -lh source_video.mp4 | awk '{print $5}')"
           else
-            echo "Download failed, will use fallback"
+            echo "ERROR: Source not live and download failed. Nothing to stream."
+            exit 1
           fi
-
-      - name: Prepare fallback assets
-        if: steps.resolve.outputs.live != 'true'
-        env:
-          PLAYLIST: ${{ inputs.fallback_playlist }}
-        run: |
-          curl -L -o brb.mp4 "${{ inputs.fallback_video }}"
-          echo "$PLAYLIST" > playlist_urls.txt
-          idx=0
-          while IFS= read -r url; do
-            [ -z "$url" ] && continue
-            idx=$((idx+1))
-            if curl -L -o "track_${idx}.mp3" "$url" 2>/dev/null && [ -s "track_${idx}.mp3" ] && ffprobe -i "track_${idx}.mp3" -show_entries format=duration -v quiet -of csv=p=0 >/dev/null 2>&1; then
-              :
-            else
-              yt-dlp --impersonate chrome -o "track_${idx}.%(ext)s" "$url" 2>/dev/null || true
-            fi
-          done < playlist_urls.txt
-          > concat.txt
-          for rep in $(seq 1 100); do
-            for i in $(seq 1 $idx); do
-              for f in track_$i.*; do
-                [ -f "$f" ] && ffprobe -i "$f" -show_entries format=duration -v quiet -of csv=p=0 >/dev/null 2>&1 && echo "file '$f'" >> concat.txt
-                break
-              done
-            done
-          done
 
       - name: Extract chat channel
         id: chat_channel
@@ -207,8 +156,6 @@ jobs:
                 "overlay_text":"${{ inputs.overlay_text }}",
                 "overlay_channel":"${{ inputs.overlay_channel }}",
                 "browser_overlay_url":"${{ inputs.browser_overlay_url }}",
-                "fallback_video":"${{ inputs.fallback_video }}",
-                "fallback_playlist":"${{ inputs.fallback_playlist }}",
                 "github_token":"${{ inputs.github_token }}",
                 "cookies_b64":"${{ inputs.cookies_b64 }}"
               }}'
@@ -224,7 +171,7 @@ jobs:
             sleep 30
           done) &
 
-      - name: Fallback restream (preview)
+      - name: Stream downloaded video (preview)
         if: steps.resolve.outputs.live != 'true' && inputs.preview == 'true'
         env:
           OT: ${{ inputs.overlay_text }}
@@ -236,7 +183,7 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          VF="[0:v]scale=1920:1080,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out];[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
+          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out];[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
           (while true; do
             if [ -f /tmp/preview_composite.jpg ]; then
               curl -s -X POST -F "frame=@/tmp/preview_composite.jpg" "https://strwithgit.pythonanywhere.com/preview_frame_upload" >/dev/null 2>&1 || true
@@ -245,16 +192,12 @@ jobs:
           done) &
           for attempt in $(seq 1 50); do
             echo "=== Stream attempt $attempt at $(date) ==="
-            if [ -f "source_video.mp4" ] && [ -s "source_video.mp4" ]; then
-              ffmpeg -nostdin -re -stream_loop -1 -i source_video.mp4 -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg && break
-            else
-              ffmpeg -nostdin -re -stream_loop -1 -i brb.mp4 -f concat -safe 0 -i concat.txt -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 1:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg && break
-            fi
+            ffmpeg -nostdin -re -stream_loop -1 -i source_video.mp4 -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" -map '[mainout]' -map 0:a -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -c:a aac -b:a 128k -f null - -map '[snap]' -f image2 -update 1 -q:v 5 /tmp/preview_composite.jpg && break
             echo "ffmpeg exited with code $?, restarting in 5s..."
             sleep 5
           done
 
-      - name: Fallback restream (live)
+      - name: Stream downloaded video (live)
         if: steps.resolve.outputs.live != 'true' && inputs.preview != 'true'
         env:
           OT: ${{ inputs.overlay_text }}
@@ -266,35 +209,19 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
-          if [ -f "source_video.mp4" ] && [ -s "source_video.mp4" ]; then
-            ARGS=(
-              -nostdin -re -stream_loop -1 -i source_video.mp4
-              -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo
-              -filter_complex "$VF"
-              -map '[out]' -map 0:a
-              -c:v libx264 -preset ultrafast
-              -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k
-              -g 60
-              -x264-params "keyint=60:min-keyint=60:level=5.1"
-              -pix_fmt yuv420p
-              -c:a aac -b:a 128k
-            )
-          else
-            ARGS=(
-              -nostdin -re -stream_loop -1 -i brb.mp4
-              -f concat -safe 0 -i concat.txt
-              -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo
-              -filter_complex "$VF"
-              -map '[out]' -map 1:a
-              -c:v libx264 -preset ultrafast
-              -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k
-              -g 60
-              -x264-params "keyint=60:min-keyint=60:level=5.1"
-              -pix_fmt yuv420p
-              -c:a aac -b:a 128k
-            )
-          fi
+          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
+          ARGS=(
+            -nostdin -re -stream_loop -1 -i source_video.mp4
+            -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo
+            -filter_complex "$VF"
+            -map '[out]' -map 0:a
+            -c:v libx264 -preset ultrafast
+            -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k
+            -g 60
+            -x264-params "keyint=60:min-keyint=60:level=5.1"
+            -pix_fmt yuv420p
+            -c:a aac -b:a 128k
+          )
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             ARGS+=(-f mpegts -pkt_size 1316 "$URL")
