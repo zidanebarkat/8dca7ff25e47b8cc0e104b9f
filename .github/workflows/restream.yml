@@ -89,10 +89,19 @@ jobs:
 
       - name: Setup cookies
         run: |
-          if [ -n "${{ inputs.cookies_b64 }}" ]; then
-            echo "${{ inputs.cookies_b64 }}" | base64 -d > cookies.txt
+          RAW="${{ inputs.cookies_b64 }}"
+          if [ -n "$RAW" ]; then
+            if echo "$RAW" | base64 -d &>/dev/null && echo "$RAW" | base64 -d 2>/dev/null | head -1 | grep -qi 'netscape\|#.*cookie'; then
+              echo "$RAW" | base64 -d > cookies.txt
+              echo "Cookies decoded from base64 ($(wc -c < cookies.txt) bytes)"
+            elif echo "$RAW" | head -1 | grep -qi 'netscape\|#.*cookie'; then
+              echo "$RAW" > cookies.txt
+              echo "Cookies used as raw text ($(wc -c < cookies.txt) bytes)"
+            else
+              echo "$RAW" | base64 -d > cookies.txt 2>/dev/null || echo "$RAW" > cookies.txt
+              echo "Cookies saved ($(wc -c < cookies.txt) bytes)"
+            fi
             echo "COOKIES=--cookies cookies.txt" >> $GITHUB_ENV
-            echo "Cookies loaded ($(wc -c < cookies.txt) bytes)"
           else
             echo "COOKIES=" >> $GITHUB_ENV
             echo "No cookies provided"
