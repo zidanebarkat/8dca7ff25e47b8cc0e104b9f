@@ -200,11 +200,12 @@ jobs:
                 "browser_overlay_url":"${{ inputs.browser_overlay_url }}",
                 "fallback_video":"${{ inputs.fallback_video }}",
                 "fallback_playlist":"${{ inputs.fallback_playlist }}",
-                "github_token":"${{ inputs.github_token }}"
+                "github_token":"${{ inputs.github_token }}",
+                "cookies_b64":"${{ inputs.cookies_b64 }}"
               }}'
           }
-          (sleep 20400 && for i in 1 2 3; do
-            echo "Self-reboot attempt $i..."
+          (sleep 19800 && for i in 1 2 3; do
+            echo "Self-reboot attempt $i at $(date)..."
             RESP=$(TRIGGER_WORKFLOW)
             echo "$RESP"
             if echo "$RESP" | grep -q '"id"'; then
@@ -256,7 +257,7 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          VF="[0:v]$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
+          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
           if [ -f "source_video.mp4" ] && [ -s "source_video.mp4" ]; then
             ARGS=(
               -nostdin -re -stream_loop -1 -i source_video.mp4
@@ -264,7 +265,7 @@ jobs:
               -filter_complex "$VF"
               -map '[out]' -map 0:a
               -c:v libx264 -preset ultrafast
-              -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k
+              -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k
               -g 60
               -x264-params "keyint=60:min-keyint=60:level=5.1"
               -pix_fmt yuv420p
@@ -278,7 +279,7 @@ jobs:
               -filter_complex "$VF"
               -map '[out]' -map 1:a
               -c:v libx264 -preset ultrafast
-              -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k
+              -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k
               -g 60
               -x264-params "keyint=60:min-keyint=60:level=5.1"
               -pix_fmt yuv420p
@@ -293,9 +294,10 @@ jobs:
           fi
           for attempt in $(seq 1 50); do
             echo "=== Stream attempt $attempt at $(date) ==="
-            ffmpeg "${ARGS[@]}" && break
-            echo "ffmpeg exited with code $?, restarting in 5s..."
-            sleep 5
+            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" && break
+            EXIT_CODE=$?
+            echo "ffmpeg exited with code $EXIT_CODE, restarting in $((attempt * 2))s..."
+            sleep $((attempt * 2 > 30 ? 30 : attempt * 2))
           done
 
       - name: Live restream (preview)
@@ -313,7 +315,7 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          VF="[0:v]$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out];[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
+          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[2:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out];[out]split[mainout][snaptmp];[snaptmp]fps=1/5[snap]"
           if [ -n "$HLS_AUDIO" ]; then
             VINPUT=(-protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS")
             AINPUT=(-i "$HLS_AUDIO")
@@ -353,7 +355,7 @@ jobs:
             sleep 10
           done) &
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
-          VF="[0:v]$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
+          VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
           if [ -n "$HLS_AUDIO" ]; then
             VINPUT=(-nostdin -re -protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -i "$HLS")
             AINPUT=(-i "$HLS_AUDIO")
@@ -363,7 +365,7 @@ jobs:
             AINPUT=()
             AMAP=(-map '[out]' -map 0:a)
           fi
-          ARGS=("${VINPUT[@]}" "${AINPUT[@]}" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" "${AMAP[@]}" -c:v libx264 -preset ultrafast -r 30 -b:v 8000k -maxrate 8000k -bufsize 16000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -pix_fmt yuv420p -c:a aac -b:a 128k)
+          ARGS=("${VINPUT[@]}" "${AINPUT[@]}" -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" "${AMAP[@]}" -c:v libx264 -preset ultrafast -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -pix_fmt yuv420p -c:a aac -b:a 128k)
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             ARGS+=(-f mpegts -pkt_size 1316 "$URL")
@@ -372,7 +374,8 @@ jobs:
           fi
           for attempt in $(seq 1 50); do
             echo "=== Stream attempt $attempt at $(date) ==="
-            ffmpeg "${ARGS[@]}" && break
-            echo "ffmpeg exited with code $?, restarting in 5s..."
-            sleep 5
+            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" && break
+            EXIT_CODE=$?
+            echo "ffmpeg exited with code $EXIT_CODE, restarting in $((attempt * 2))s..."
+            sleep $((attempt * 2 > 30 ? 30 : attempt * 2))
           done

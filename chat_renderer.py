@@ -18,7 +18,7 @@ def yt_get_live_chat_id(video_id, api_key):
 def yt_poll_chat(live_chat_id, api_key, messages, max_messages=12):
     page_token = ''
     poll_ms = 2000
-    url = f"https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId={live_chat_id}&part=snippet&key={api_key}&maxResults=100"
+    url = f"https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId={live_chat_id}&part=snippet,authorDetails&key={api_key}&maxResults=100"
     if page_token:
         url += f"&pageToken={page_token}"
     try:
@@ -26,7 +26,8 @@ def yt_poll_chat(live_chat_id, api_key, messages, max_messages=12):
         data = json.loads(resp.read())
         for item in data.get('items', []):
             snippet = item.get('snippet', {})
-            author = snippet.get('authorDetails', {}).get('displayName', '') if 'authorDetails' in snippet else ''
+            author_details = item.get('authorDetails', {})
+            author = author_details.get('displayName', '')
             text = snippet.get('displayMessage', '') or snippet.get('textMessageDetails', {}).get('messageText', '')
             if text:
                 entry = f"{author}: {text}" if author else text
@@ -34,6 +35,7 @@ def yt_poll_chat(live_chat_id, api_key, messages, max_messages=12):
         while len(messages) > max_messages:
             messages.popleft()
         poll_ms = data.get('pollingIntervalMillis', 2000)
+        page_token = data.get('nextPageToken', '')
     except urllib.error.HTTPError as e:
         code = e.code
         if code == 403:
@@ -129,9 +131,21 @@ def main():
         if not args.access_token:
             print("ERROR: Facebook requires --access-token", file=sys.stderr)
             sys.exit(1)
+        token = args.access_token
+        config_url = os.environ.get('CONFIG_URL', '')
         while True:
             try:
-                fb_poll_comments(args.video_id, args.access_token, messages, args.max_messages)
+                if config_url:
+                    try:
+                        resp = urllib.request.urlopen(config_url, timeout=5)
+                        cfg = json.loads(resp.read())
+                        new_token = cfg.get('fb_chat_token', '')
+                        if new_token and new_token != token:
+                            token = new_token
+                            print("Refreshed FB token from config", file=sys.stderr)
+                    except Exception:
+                        pass
+                fb_poll_comments(args.video_id, token, messages, args.max_messages)
                 write_chat_file(messages, args.output)
             except Exception as e:
                 print(f"Error: {e}", file=sys.stderr)

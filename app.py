@@ -23,13 +23,40 @@ app = Flask(__name__)
 GITHUB_TOKEN = _ENV.get('GITHUB_TOKEN', '')
 GITHUB_REPO = _ENV.get('GITHUB_REPO', '')
 GITHUB_OWNER = _ENV.get('GITHUB_OWNER', '')
+PANEL_PASSWORD = _ENV.get('PANEL_PASSWORD', '')
 current_run_id = None
 config_path = 'gh_config.json'
 log_buffer = []
 log_lock = threading.Lock()
 
+from functools import wraps
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not PANEL_PASSWORD:
+            return f(*args, **kwargs)
+        auth = request.authorization
+        if auth and auth.password == PANEL_PASSWORD:
+            return f(*args, **kwargs)
+        return ('Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Stream Panel"'})
+    return decorated
+
+AUTH_WHITELIST = {'/preview_frame', '/preview_frame_upload'}
+
+@app.before_request
+def check_auth():
+    if not PANEL_PASSWORD:
+        return
+    if request.path in AUTH_WHITELIST:
+        return
+    auth = request.authorization
+    if auth and auth.password == PANEL_PASSWORD:
+        return
+    return ('Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Stream Panel"'})
+
 def init_wanted():
-    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted
+    global wanted, yt_wanted, twt_wanted, tt_wanted, fb_wanted, kick_chill_wanted
     try:
         with open(config_path) as f:
             c = json.load(f)
@@ -39,6 +66,7 @@ def init_wanted():
             tt_wanted = c.get('tt_wanted', False)
             fb_wanted = c.get('fb_wanted', False)
             fb_now_wanted = c.get('fb_now_wanted', False)
+            kick_chill_wanted = c.get('kick_chill_wanted', False)
     except:
         pass
 
@@ -56,6 +84,7 @@ DEFAULTS = {
     'yt_keepalive': False,
     'twt_url': _ENV.get('TWT_URL', 'https://www.twitch.tv/kaicenat'),
     'twt_key': _ENV.get('TWT_KEY', ''),
+    'twt_restream_url': '',
     'twt_repo': _ENV.get('TWT_REPO', '8dca7ff25e47b8cc0e104b9f-twt'),
     'twt_keepalive': False,
     'twt_client_id': _ENV.get('TWT_CLIENT_ID', ''),
@@ -64,6 +93,7 @@ DEFAULTS = {
     'tt_key': _ENV.get('TT_KEY', ''),
     'tt_repo': _ENV.get('TT_REPO', '8dca7ff25e47b8cc0e104b9f-tt'),
     'tt_keepalive': False,
+    'tt_source_duration': 1800,
     'fb_url': _ENV.get('FB_URL', 'https://www.twitch.tv/kaicenat'),
     'fb_key': _ENV.get('FB_KEY', ''),
     'fb_repo': _ENV.get('FB_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
@@ -75,11 +105,16 @@ DEFAULTS = {
     'fb_now_key': '',
     'fb_now_repo': _ENV.get('FB_NOW_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_now_keepalive': False,
+    'kick_chill_repo': _ENV.get('KICK_CHILL_REPO', '8dca7ff25e47b8cc0e104b9f-kick-chill'),
+    'kick_chill_url': '',
+    'kick_chill_key': '',
+    'kick_chill_keepalive': False,
     'fallback_enabled': False,
     'fallback_video': _ENV.get('FALLBACK_VIDEO', 'https://cdn.pixabay.com/video/2025/10/23/311602_large.mp4'),
     'fallback_playlist': _ENV.get('FALLBACK_PLAYLIST', 'https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/yFLu7P69mDjxhW2aF5MS16GVCqpw4oCqSKw4eSVN.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Djej42Pty0GrF6VFUNzYPDxsuhCwgWzF9ZHWFsZY.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/wuk3O930psKilYVATDrGLTiu5RpokFDrza69zKb9.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/0FIn9jCJbW1dgviRdVqoJWsyBCmfPZtgfNmlhy3u.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/O6KDPWo1JOIOwsdqMIA4kidFWmy029ZvVjQDJngh.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/2vMps2c9OEHdkncSObxKRhBtrY5tPKRxROyIM3Kw.mp3,https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/Bki0dtfe4SfgBMxIBMOaXcuePHGCLbaL7QjZAcH4.mp3'),
     'overlay_text': '',
     'browser_overlay_url': '',
+    'cookies_b64': '',
     'overlay_channel': 'zed-bx',
     'kick_wanted': False,
     'yt_wanted': False,
@@ -104,6 +139,7 @@ twt_wanted = False
 tt_wanted = False
 fb_wanted = False
 fb_now_wanted = False
+kick_chill_wanted = False
 
 def load_config():
     try:
@@ -177,8 +213,8 @@ def trigger_yt_workflow(source_url, youtube_key):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = youtube_key if youtube_key.startswith('rtmp') else f'rtmp://a.rtmp.youtube.com/live2/{youtube_key}'
-    cookies_b64 = ''
-    if cfg.get('yt_cookies'):
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if not cookies_b64 and cfg.get('yt_cookies'):
         import base64, json
         raw = cfg['yt_cookies'].strip()
         if raw.startswith('['):
@@ -224,6 +260,28 @@ def trigger_twt_workflow(source_url, twitch_key):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = twitch_key if twitch_key.startswith(('rtmp', 'srt')) else f'rtmp://live.twitch.tv/app/{twitch_key}'
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if not cookies_b64 and cfg.get('yt_cookies'):
+        import base64, json
+        raw = cfg['yt_cookies'].strip()
+        if raw.startswith('['):
+            try:
+                cookies = json.loads(raw)
+                lines = ['# Netscape HTTP Cookie File']
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expirationDate', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                raw = '\n'.join(lines) + '\n'
+            except:
+                pass
+        cookies_b64 = base64.b64encode(raw.encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
@@ -231,6 +289,7 @@ def trigger_twt_workflow(source_url, twitch_key):
         'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'cookies_b64': cookies_b64,
         'github_token': token,
     }
     data = {'ref': 'main', 'inputs': inputs}
@@ -249,14 +308,35 @@ def trigger_tt_workflow(source_url, tiktok_key):
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = tiktok_key if tiktok_key.startswith(('rtmp', 'srt')) else f'rtmp://push-fs-hsc.pull-ttok.com/ingest/{tiktok_key}'
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if not cookies_b64 and cfg.get('yt_cookies'):
+        import base64, json
+        raw = cfg['yt_cookies'].strip()
+        if raw.startswith('['):
+            try:
+                cookies = json.loads(raw)
+                lines = ['# Netscape HTTP Cookie File']
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expirationDate', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                raw = '\n'.join(lines) + '\n'
+            except:
+                pass
+        cookies_b64 = base64.b64encode(raw.encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
-        'fallback_video': cfg.get('fallback_video', ''),
-        'fallback_playlist': cfg.get('fallback_playlist', ''),
         'overlay_text': cfg.get('overlay_text', ''),
-        'browser_overlay_url': cfg.get('browser_overlay_url', ''),
+        'cookies_b64': cookies_b64,
         'github_token': token,
+        'source_duration': str(cfg.get('tt_source_duration', 1800)),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -336,6 +416,54 @@ def trigger_fb_now_workflow(source_url, facebook_key, source_index=0, sources_b6
         'chat_enabled': 'true' if cfg.get('fb_now_chat_enabled') else 'false',
         'fb_live_video_id': cfg.get('fb_live_video_id', ''),
         'fb_chat_token': cfg.get('fb_chat_token', ''),
+    }
+    data = {'ref': 'main', 'inputs': inputs}
+    r = requests.post(url, json=data, headers=headers)
+    if r.status_code not in (204, 201, 200):
+        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
+    return 'triggered', None
+
+def trigger_kick_chill_workflow(source_url, kick_key):
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('kick_chill_repo') or '8dca7ff25e47b8cc0e104b9f-kick-chill'
+    if not token or not owner or not repo:
+        return None, 'Missing GitHub config'
+    url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/stream.yml/dispatches'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    output_url = kick_key if kick_key.startswith(('rtmp', 'srt')) else f'rtmp://stream.kick.com/app/{kick_key}'
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    raw_cookies = cfg.get('yt_cookies', '')
+    if not cookies_b64 and raw_cookies:
+        import base64, json
+        raw = raw_cookies.strip()
+        if raw.startswith('['):
+            try:
+                cookies = json.loads(raw)
+                lines = ['# Netscape HTTP Cookie File']
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expirationDate', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                raw = '\n'.join(lines) + '\n'
+            except:
+                pass
+        cookies_b64 = base64.b64encode(raw.encode()).decode()
+    inputs = {
+        'source_url': source_url,
+        'output_url': output_url,
+        'overlay_text': cfg.get('overlay_text', ''),
+        'cookies_b64': cookies_b64,
+        'github_token': token,
+        'fallback_video': cfg.get('fallback_video', ''),
+        'fallback_playlist': cfg.get('fallback_playlist', ''),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -661,9 +789,10 @@ def twt_start():
     cfg = load_config()
     if not cfg.get('twt_url'):
         return jsonify({'ok': False, 'error': 'Missing source URL'})
-    if not cfg.get('twt_key'):
-        return jsonify({'ok': False, 'error': 'Missing Twitch stream key'})
-    msg, err = trigger_twt_workflow(cfg['twt_url'], cfg.get('twt_key',''))
+    key = cfg.get('twt_restream_url', '') or cfg.get('twt_key', '')
+    if not key:
+        return jsonify({'ok': False, 'error': 'Missing stream key or Restream URL'})
+    msg, err = trigger_twt_workflow(cfg['twt_url'], key)
     if err:
         return jsonify({'ok': False, 'error': err})
     twt_wanted = True
@@ -1381,6 +1510,31 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     </div>
     <div id="testResult" style="font-size:12px;color:#8b949e;margin-top:8px"></div>
 </div>
+<div class="card" style="border-color:#6441a5">
+  <h2>Twitch via Restream</h2>
+  <div class="form-group">
+    <label>Restream RTMP URL</label>
+    <input type="text" name="twt_restream_url" id="twt_restream_url" placeholder="rtmp://live.restream.io/live/restream_token_XXXX">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">
+      Get from <a href="https://restream.io/streaming" target="_blank" style="color:#58a6ff">restream.io/streaming</a> — add Twitch as a channel. Paste full RTMP URL.
+    </div>
+  </div>
+  <div class="form-group">
+    <label>Twitch Repo</label>
+    <input name="twt_repo" id="twt_repo" placeholder="8dca7ff25e47b8cc0e104b9f-twt">
+  </div>
+  <div class="form-group">
+    <label>YouTube Cookies (for YouTube sources — export from Chrome via "Get cookies.txt")</label>
+    <textarea name="yt_cookies" id="yt_cookies" rows="3" placeholder="Paste Netscape cookies.txt content from Chrome (YouTube must be logged in)"></textarea>
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">
+      Use <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" style="color:#58a6ff">Get cookies.txt LOCALLY</a> extension on youtube.com. Shared across YT/FB-Now/TikTok/Twitch panels.
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-purple" id="btnGoLiveTWT" onclick="goLiveTWT()">▶ Go Live (Twitch)</button>
+    <button class="btn btn-red" id="btnStopTWT" onclick="stopTWT()" disabled>⏹ Stop Twitch</button>
+  </div>
+</div>
 <div class="card">
   <h2>Fallback (when source is offline)</h2>
   <div class="form-group">
@@ -1468,6 +1622,23 @@ function stopStream() {
   fetch('/stop').then(r=>r.json()).then(d=>{
     addLog(d.ok ? 'Stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
   }).catch(e=>addLog('Stop failed','err'));
+}
+function goLiveTWT() {
+  document.getElementById('btnGoLiveTWT').disabled = true;
+  addLog('Starting Twitch via Restream...','info');
+  saveConfig(() => {
+    fetch('/twitch/start').then(r=>r.json()).then(d=>{
+      if(!d.ok) { addLog('Error: '+d.error,'err'); }
+      document.getElementById('btnGoLiveTWT').disabled = false;
+    }).catch(e=>{ addLog('Twitch start failed','err'); document.getElementById('btnGoLiveTWT').disabled = false; });
+  });
+}
+function stopTWT() {
+  document.getElementById('btnStopTWT').disabled = true;
+  addLog('Stopping Twitch...','warn');
+  fetch('/twitch/stop').then(r=>r.json()).then(d=>{
+    addLog(d.ok ? 'Twitch stopped' : 'Error: '+d.error, d.ok ? 'warn' : 'err');
+  }).catch(e=>addLog('Twitch stop failed','err'));
 }
 function pushOverlay() {
   saveConfig(() => addLog('Overlay pushed','ok'));
@@ -1599,10 +1770,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 </div>
 <div class="card">
   <h2>Stream Config</h2>
-  <div class="form-group">
-    <label>Source URL (Twitch)</label>
-    <input type="url" name="twt_url" id="twt_url" placeholder="https://www.twitch.tv/streamer">
-  </div>
+    <div class="form-group">
+      <label>Source URL (Twitch or YouTube)</label>
+      <input type="url" name="twt_url" id="twt_url" placeholder="https://www.twitch.tv/streamer or https://youtube.com/watch?v=...">
+    </div>
   <div class="form-group">
     <label>Twitch Client ID</label>
     <input type="text" name="twt_client_id" id="twt_client_id" placeholder="Your Twitch app client ID">
@@ -1618,6 +1789,13 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
     <label>Twitch Stream Key</label>
     <input type="text" name="twt_key" id="twt_key" placeholder="live_xxxxxxxxx_xxxxxxxxxxxxxxxxxx">
   </div>
+  <div class="form-group">
+    <label>Restream RTMP URL (for TikTok/Twitch relay via Restream)</label>
+    <input type="text" name="twt_restream_url" id="twt_restream_url" placeholder="rtmp://live.restream.io/live/restream_token_XXXX">
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">
+      Get from <a href="https://restream.io/streaming" target="_blank" style="color:#58a6ff">restream.io/streaming</a> — add Twitch as a channel. Paste full RTMP URL. If set, this is used instead of Twitch Stream Key.
+    </div>
+  </div>
     <div class="form-group">
       <label>Overlay Text (displayed on stream)</label>
       <div style="display:flex;gap:8px">
@@ -1629,6 +1807,11 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <label>Browser Overlay URL (Fusion Chat, alerts, counters, etc.)</label>
       <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
       <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
+    </div>
+    <div class="form-group">
+      <label>YouTube Cookies (base64-encoded cookies.txt for YouTube sources)</label>
+      <textarea name="cookies_b64" id="cookies_b64" rows="2" placeholder="Paste base64-encoded cookies.txt here..."></textarea>
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">For YouTube sources: <code>base64 -w0 cookies.txt</code></div>
     </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
@@ -2110,7 +2293,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
-<h1>TikTok Stream Panel</h1>
+<h1>TikTok Stream Panel <span style="font-size:13px;color:#8b949e;font-weight:normal">(via Restream)</span></h1>
 <div class="status-bar">
   <span><span class="status-dot" id="statusDot"></span><span class="status-text" id="statusText">Checking...</span></span>
 </div>
@@ -2134,18 +2317,17 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (Twitch)</label>
-    <input type="url" name="tt_url" id="tt_url" placeholder="https://www.twitch.tv/streamer">
+    <label>Source URL (YouTube, Twitch, etc.)</label>
+    <input type="url" name="tt_url" id="tt_url" placeholder="https://www.youtube.com/watch?v=...">
   </div>
   <div class="form-group">
-    <label>TikTok Stream Key</label>
+    <label>Restream RTMP URL</label>
     <div style="display:flex;gap:8px">
-      <input type="text" name="tt_key" id="tt_key" placeholder="From livecenter.tiktok.com/producer" style="flex:1">
-      <button class="btn btn-grey btn-sm" onclick="fetchTikTokKey()" style="white-space:nowrap">🤖 Auto-Fetch</button>
+      <input type="text" name="tt_key" id="tt_key" placeholder="rtmp://live.restream.io/live/stream_key_XXXX" style="flex:1">
     </div>
     <div style="font-size:11px;color:#8b949e;margin-top:2px">
-      Get key manually at <a href="https://livecenter.tiktok.com/producer" target="_blank" style="color:#58a6ff">livecenter.tiktok.com/producer</a> — key expires after 2 hours<br>
-      Or run <code style="background:#21262d;padding:1px 4px;border-radius:3px">python tiktok_automation.py</code> locally to auto-fetch
+      Get from <a href="https://restream.io/streaming" target="_blank" style="color:#58a6ff">restream.io/streaming</a> — add TikTok as a channel in Restream<br>
+      Free plan: 720p, Restream watermark. Paste full RTMP URL including stream key.
     </div>
   </div>
     <div class="form-group">
@@ -2232,8 +2414,7 @@ function testSource() {
   }).catch(()=>el.textContent='✗ Failed');
 }
 function fetchTikTokKey() {
-  addLog('Opening instruction...','info');
-  alert('Run this on your LOCAL computer:\n\n1. pip install playwright\n2. playwright install chromium\n3. python tiktok_automation.py\n\nIt will open a browser, let you log into TikTok, and auto-fetch the stream key.\n\nThe key will be sent to this panel automatically.');
+  alert('1. Go to https://restream.io/ → Sign up (free)\n2. Add TikTok as a channel\n3. Go to Streaming tab → copy RTMP URL\n4. Paste the full URL in the Restream RTMP URL field above');
 }
 function uploadEnv(file) {
   if (!file) return;
@@ -3010,6 +3191,204 @@ function resetForm() {
   document.getElementById('fadeTime').value = '30';
   document.getElementById('urlBox').style.display = 'none';
 }
+</script>
+</body>
+</html>'''
+
+# ── KICK Chill (standalone) ──────────────────────────────────────
+
+@app.route('/kick-chill')
+def kick_chill_index():
+    return HTML_KICK_CHILL_PANEL
+
+@app.route('/kick-chill/status')
+def kick_chill_status():
+    cfg = load_config()
+    token = cfg.get('github_token')
+    owner = cfg.get('github_owner')
+    repo = cfg.get('kick_chill_repo')
+    live = False
+    run_id = None
+    if token and owner and repo:
+        url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/stream.yml/runs?status=in_progress&per_page=1'
+        headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            runs = r.json().get('workflow_runs', [])
+            if runs:
+                run_id = runs[0]['id']
+                live = True
+        except:
+            pass
+    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'wanted': kick_chill_wanted})
+
+@app.route('/kick-chill/start')
+def kick_chill_start():
+    global kick_chill_wanted
+    cfg = load_config()
+    url = cfg.get('kick_chill_url', '').strip()
+    key = cfg.get('kick_chill_key', '').strip()
+    if not url:
+        return jsonify({'ok': False, 'error': 'Missing YouTube source URL'})
+    if not key:
+        return jsonify({'ok': False, 'error': 'Missing Kick stream key/URL'})
+    msg, err = trigger_kick_chill_workflow(url, key)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    kick_chill_wanted = True
+    save_config(cfg)
+    log('KICK Chill workflow triggered')
+    return jsonify({'ok': True, 'msg': msg})
+
+@app.route('/kick-chill/stop')
+def kick_chill_stop():
+    global kick_chill_wanted
+    kick_chill_wanted = False
+    cfg = load_config()
+    save_config(cfg)
+    token = cfg.get('github_token')
+    owner = cfg.get('github_owner')
+    repo = cfg.get('kick_chill_repo')
+    if not token or not owner or not repo:
+        return jsonify({'ok': False, 'error': 'GitHub not configured'})
+    url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/stream.yml/runs?status=in_progress&per_page=1'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        runs = r.json().get('workflow_runs', [])
+        if runs:
+            run_id = runs[0]['id']
+            cancel_url = f'https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/cancel'
+            requests.post(cancel_url, headers=headers)
+            log('KICK Chill workflow cancelled')
+            return jsonify({'ok': True})
+    except:
+        pass
+    return jsonify({'ok': False, 'error': 'No active run found'})
+
+HTML_KICK_CHILL_PANEL = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KICK Chill</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#111;border:1px solid #2a2a2a;border-radius:16px;padding:32px;width:100%;max-width:520px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+h1{font-size:28px;text-align:center;margin-bottom:8px;color:#53fc18}
+.subtitle{text-align:center;color:#666;font-size:13px;margin-bottom:24px}
+.status{text-align:center;margin-bottom:20px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
+.dot.live{background:#53fc18;box-shadow:0 0 12px #53fc18;animation:pulse 2s infinite}
+.dot.off{background:#555}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+label{display:block;font-size:12px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+input[type="text"],textarea{width:100%;padding:12px 14px;background:#1a1a1a;border:1px solid #333;border-radius:10px;color:#e0e0e0;font-size:14px;outline:none;transition:border .2s}
+input:focus,textarea:focus{border-color:#53fc18}
+textarea{resize:vertical;min-height:60px;font-family:monospace;font-size:11px}
+.field{margin-bottom:16px}
+.btns{display:flex;gap:12px;margin-top:20px}
+.btn{flex:1;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-go{background:#53fc18;color:#000}
+.btn-go:hover{background:#6fff3a;transform:scale(1.02)}
+.btn-stop{background:#ff3333;color:#fff}
+.btn-stop:hover{background:#ff5555;transform:scale(1.02)}
+.btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.hint{font-size:11px;color:#555;margin-top:4px}
+.hint a{color:#53fc18;text-decoration:none}
+.log{margin-top:20px;background:#0d0d0d;border:1px solid #222;border-radius:10px;padding:12px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;color:#888}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>KICK Chill</h1>
+  <p class="subtitle">Stream any YouTube video 24/7 to Kick</p>
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusText" style="font-size:13px">Checking...</span>
+  </div>
+  <div class="field">
+    <label>YouTube URL</label>
+    <input type="text" id="kc_url" placeholder="https://www.youtube.com/watch?v=...">
+    <div class="hint">Live streams loop forever. Videos download then loop.</div>
+  </div>
+  <div class="field">
+    <label>Kick Stream Key</label>
+    <input type="text" id="kc_key" placeholder="rtmp://stream.kick.com/app/...">
+    <div class="hint">Full RTMP URL or just the stream key</div>
+  </div>
+  <div class="field">
+    <label>Overlay Text</label>
+    <input type="text" id="overlay_text" placeholder="KICK Chill">
+  </div>
+  <div class="field">
+    <label>YouTube Cookies</label>
+    <textarea id="yt_cookies" rows="3" placeholder="Paste Netscape cookies.txt content (needed for bot detection bypass)"></textarea>
+    <div class="hint">Export from Chrome via <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt</a></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-go" id="btnGo" onclick="goChill()">GO LIVE</button>
+    <button class="btn btn-stop" id="btnStop" onclick="stopChill()" disabled>STOP</button>
+  </div>
+  <div class="log" id="logBox">Waiting...</div>
+</div>
+<script>
+let pollTimer;
+function goChill() {
+  document.getElementById('btnGo').disabled = true;
+  saveKC();
+  fetch('/kick-chill/start').then(r=>r.json()).then(d=>{
+    document.getElementById('logBox').textContent = d.ok ? 'Stream started!' : d.error;
+    document.getElementById('btnGo').disabled = false;
+    poll();
+  }).catch(e=>{
+    document.getElementById('logBox').textContent = 'Error: '+e;
+    document.getElementById('btnGo').disabled = false;
+  });
+}
+function stopChill() {
+  document.getElementById('btnStop').disabled = true;
+  fetch('/kick-chill/stop').then(r=>r.json()).then(d=>{
+    document.getElementById('logBox').textContent = d.ok ? 'Stopped!' : d.error;
+    document.getElementById('btnStop').disabled = false;
+    poll();
+  });
+}
+function saveKC() {
+  const cfg = {
+    kick_chill_url: document.getElementById('kc_url').value,
+    kick_chill_key: document.getElementById('kc_key').value,
+    overlay_text: document.getElementById('overlay_text').value,
+    yt_cookies: document.getElementById('yt_cookies').value
+  };
+  fetch('/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg)});
+}
+function poll() {
+  fetch('/kick-chill/status').then(r=>r.json()).then(d=>{
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('statusText');
+    if (d.live) {
+      dot.className = 'dot live';
+      txt.textContent = 'LIVE';
+      txt.style.color = '#53fc18';
+      document.getElementById('btnStop').disabled = false;
+    } else {
+      dot.className = 'dot off';
+      txt.textContent = 'Offline';
+      txt.style.color = '#666';
+      document.getElementById('btnStop').disabled = true;
+    }
+    if (d.config) {
+      if (d.config.kick_chill_url) document.getElementById('kc_url').value = d.config.kick_chill_url;
+      if (d.config.kick_chill_key) document.getElementById('kc_key').value = d.config.kick_chill_key;
+      if (d.config.overlay_text) document.getElementById('overlay_text').value = d.config.overlay_text;
+      if (d.config.yt_cookies) document.getElementById('yt_cookies').value = d.config.yt_cookies;
+    }
+  });
+}
+poll();
+pollTimer = setInterval(poll, 5000);
 </script>
 </body>
 </html>'''
