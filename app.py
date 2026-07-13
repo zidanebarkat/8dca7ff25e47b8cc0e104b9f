@@ -370,31 +370,35 @@ def trigger_fb_now_workflow(source_url, facebook_key, source_index=0, sources_b6
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
     output_url = facebook_key if facebook_key.startswith(('rtmp', 'srt')) else f'rtmps://live-api-s.facebook.com:443/rtmp/{facebook_key}'
-    cookies_b64 = ''
-    raw_cookies = cfg.get('fb_now_cookies', '')
-    log(f'FB-Now: fb_now_cookies in config = {len(raw_cookies)} chars')
-    if raw_cookies:
-        import base64, json
-        raw = raw_cookies.strip()
-        if raw.startswith('['):
-            try:
-                cookies = json.loads(raw)
-                lines = ['# Netscape HTTP Cookie File']
-                for c in cookies:
-                    domain = c.get('domain', '')
-                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
-                    path = c.get('path', '/')
-                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
-                    expires = str(int(c.get('expirationDate', 0)))
-                    name = c.get('name', '')
-                    value = c.get('value', '')
-                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
-                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
-                raw = '\n'.join(lines) + '\n'
-            except:
-                pass
-        cookies_b64 = base64.b64encode(raw.encode()).decode()
-        log(f'FB-Now: cookies_b64 = {len(cookies_b64)} chars')
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if not cookies_b64:
+        raw_cookies = cfg.get('fb_now_cookies', '')
+        log(f'FB-Now: fb_now_cookies in config = {len(raw_cookies)} chars')
+        if raw_cookies:
+            import base64, json
+            raw = raw_cookies.strip()
+            if raw.startswith('['):
+                try:
+                    cookies = json.loads(raw)
+                    lines = ['# Netscape HTTP Cookie File']
+                    for c in cookies:
+                        domain = c.get('domain', '')
+                        flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                        path = c.get('path', '/')
+                        secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                        expires = str(int(c.get('expirationDate', 0)))
+                        name = c.get('name', '')
+                        value = c.get('value', '')
+                        httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                        lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                    raw = '\n'.join(lines) + '\n'
+                except:
+                    pass
+            cookies_b64 = base64.b64encode(raw.encode()).decode()
+            log(f'FB-Now: cookies_b64 = {len(cookies_b64)} chars')
+    elif cookies_b64 and ('Netscape' in cookies_b64 or cookies_b64.startswith('#')):
+        import base64
+        cookies_b64 = base64.b64encode(cookies_b64.encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
