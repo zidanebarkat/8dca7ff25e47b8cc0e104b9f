@@ -99,9 +99,6 @@ DEFAULTS = {
     'fb_repo': _ENV.get('FB_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_keepalive': False,
     'fb_now_url': '',
-    'fb_now_sources': '',
-    'fb_now_source_index': 0,
-    'fb_now_source_duration': 1800,
     'fb_now_key': '',
     'fb_now_repo': _ENV.get('FB_NOW_REPO', '8dca7ff25e47b8cc0e104b9f-fb'),
     'fb_now_keepalive': False,
@@ -120,9 +117,6 @@ DEFAULTS = {
     'fb_wanted': False,
     'fb_now_wanted': False,
     'fb_now_cookies': '',
-    'fb_now_sources': '',
-    'fb_now_source_index': 0,
-    'fb_now_source_duration': 1800,
     'fb_now_chat_enabled': False,
     'fb_live_video_id': '',
     'fb_chat_token': '',
@@ -980,7 +974,7 @@ def fb_now_status():
     if token and owner and repo:
         run_id = get_active_run(token, owner, repo)
         live = run_id is not None
-    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('fb_now_keepalive', False), 'wanted': fb_now_wanted, 'source_index': cfg.get('fb_now_source_index', 0), 'source_count': len([u.strip() for u in cfg.get('fb_now_sources', '').splitlines() if u.strip()]) or (1 if cfg.get('fb_now_url') else 0)})
+    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('fb_now_keepalive', False), 'wanted': fb_now_wanted})
 
 @app.route('/fb-now/start')
 def fb_now_start():
@@ -2643,23 +2637,13 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URLs (one per line — plays sequentially, ~30min each)</label>
-    <textarea name="fb_now_sources" id="fb_now_sources" rows="5" placeholder="https://www.youtube.com/watch?v=VIDEO1&#10;https://www.youtube.com/watch?v=VIDEO2&#10;https://www.youtube.com/watch?v=VIDEO3" style="font-family:monospace;font-size:11px"></textarea>
-    <div style="font-size:11px;color:#8b949e;margin-top:2px">Each source plays for the duration below, then auto-advances to next. Leave empty to use single Source URL below.</div>
-  </div>
-  <div class="form-group">
-    <label>Single Source URL (fallback if list above is empty)</label>
-    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="YouTube, Twitch, Kick URL">
+    <label>Source URL (YouTube, Twitch, etc.)</label>
+    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="https://www.youtube.com/watch?v=...">
   </div>
   <div class="form-group">
     <label>Facebook Stream Key</label>
     <input type="text" name="fb_now_key" id="fb_now_key" placeholder="From facebook.com/live/producer">
     <div style="font-size:11px;color:#8b949e;margin-top:2px">Get it at <a href="https://facebook.com/live/producer" target="_blank" style="color:#58a6ff">facebook.com/live/producer</a></div>
-  </div>
-  <div class="form-group">
-    <label>Source Duration (seconds per source)</label>
-    <input type="number" name="fb_now_source_duration" id="fb_now_source_duration" value="1800" placeholder="1800">
-    <div style="font-size:11px;color:#8b949e;margin-top:2px">Default 1800 (30 min). After this time, auto-advances to next source in queue.</div>
   </div>
   <div class="form-group">
     <label>Overlay Text (displayed on stream)</label>
@@ -2779,7 +2763,6 @@ function updateStatus() {
     if(d.live) {
       dot.className = 'status-dot live';
       let status = '● LIVE';
-      if(d.source_count > 1) status += ` (source ${d.source_index+1}/${d.source_count})`;
       if(d.keepalive) status += ' (auto-restart)';
       txt.textContent = status;
       document.getElementById('btnGoLive').disabled = true;
