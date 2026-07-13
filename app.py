@@ -360,7 +360,7 @@ def trigger_fb_workflow(source_url, facebook_key):
         return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
     return 'triggered', None
 
-def trigger_fb_now_workflow(source_url, facebook_key, source_index=0, sources_b64=''):
+def trigger_fb_now_workflow(source_url, facebook_key):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -405,9 +405,6 @@ def trigger_fb_now_workflow(source_url, facebook_key, source_index=0, sources_b6
         'overlay_text': cfg.get('overlay_text', ''),
         'cookies_b64': cookies_b64,
         'github_token': token,
-        'source_list_b64': sources_b64,
-        'source_index': str(source_index),
-        'source_duration': str(cfg.get('fb_now_source_duration', 1800)),
         'chat_enabled': 'true' if cfg.get('fb_now_chat_enabled') else 'false',
         'fb_live_video_id': cfg.get('fb_live_video_id', ''),
         'fb_chat_token': cfg.get('fb_chat_token', ''),
@@ -988,31 +985,19 @@ def fb_now_status():
 @app.route('/fb-now/start')
 def fb_now_start():
     global fb_now_wanted
-    import base64
     cfg = load_config()
-    sources_text = cfg.get('fb_now_sources', '').strip()
-    if sources_text:
-        sources = [u.strip() for u in sources_text.splitlines() if u.strip()]
-    else:
-        src = cfg.get('fb_now_url', '')
-        sources = [src] if src else []
-    if not sources:
-        return jsonify({'ok': False, 'error': 'No source URLs'})
+    source_url = cfg.get('fb_now_url', '').strip()
+    if not source_url:
+        return jsonify({'ok': False, 'error': 'No source URL'})
     if not cfg.get('fb_now_key'):
         return jsonify({'ok': False, 'error': 'Missing Facebook stream key'})
-    sources_b64 = base64.b64encode('\n'.join(sources).encode()).decode()
-    source_index = cfg.get('fb_now_source_index', 0) or 0
-    if source_index >= len(sources):
-        source_index = 0
-    current_url = sources[source_index]
-    log(f'FB-Now: playing source {source_index+1}/{len(sources)}: {current_url[:80]}')
-    msg, err = trigger_fb_now_workflow(current_url, cfg.get('fb_now_key',''), source_index, sources_b64)
+    log(f'FB-Now: playing source: {source_url[:80]}')
+    msg, err = trigger_fb_now_workflow(source_url, cfg.get('fb_now_key',''))
     if err:
         return jsonify({'ok': False, 'error': err})
     fb_now_wanted = True
-    cfg['fb_now_source_index'] = source_index
     save_config(cfg)
-    return jsonify({'ok': True, 'msg': msg, 'source_index': source_index, 'total_sources': len(sources)})
+    return jsonify({'ok': True, 'msg': msg})
 
 @app.route('/fb-now/stop')
 def fb_now_stop():
@@ -1031,40 +1016,6 @@ def fb_now_stop():
     cancel_workflow(run_id, token, owner, repo)
     log('FB-Now workflow cancelled')
     return jsonify({'ok': True})
-
-@app.route('/fb-now/next')
-def fb_now_next():
-    global fb_now_wanted
-    import base64
-    cfg = load_config()
-    sources_text = cfg.get('fb_now_sources', '').strip()
-    if sources_text:
-        sources = [u.strip() for u in sources_text.splitlines() if u.strip()]
-    else:
-        return jsonify({'ok': False, 'error': 'No source queue'})
-    if not cfg.get('fb_now_key'):
-        return jsonify({'ok': False, 'error': 'Missing Facebook stream key'})
-    current_index = cfg.get('fb_now_source_index', 0) or 0
-    next_index = current_index + 1
-    if next_index >= len(sources):
-        if cfg.get('fb_now_keepalive'):
-            next_index = 0
-            log('FB-Now: queue finished, looping from start')
-        else:
-            log('FB-Now: queue finished, stopping')
-            fb_now_wanted = False
-            save_config(cfg)
-            return jsonify({'ok': True, 'msg': 'Queue finished'})
-    sources_b64 = base64.b64encode('\n'.join(sources).encode()).decode()
-    current_url = sources[next_index]
-    log(f'FB-Now: advancing to source {next_index+1}/{len(sources)}: {current_url[:80]}')
-    msg, err = trigger_fb_now_workflow(current_url, cfg.get('fb_now_key',''), next_index, sources_b64)
-    if err:
-        return jsonify({'ok': False, 'error': err})
-    fb_now_wanted = True
-    cfg['fb_now_source_index'] = next_index
-    save_config(cfg)
-    return jsonify({'ok': True, 'msg': msg, 'source_index': next_index, 'total_sources': len(sources)})
 
 @app.route('/fb-now/resolve')
 def fb_now_resolve_source():
