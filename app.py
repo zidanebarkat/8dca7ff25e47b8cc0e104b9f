@@ -3313,8 +3313,13 @@ def terabox_start():
     data = request.get_json(force=True)
     url = data.get('url', '').strip()
     quality = data.get('quality', '720p')
+    cookies_b64 = data.get('cookies_b64', '').strip()
     if not url:
         return jsonify({'ok': False, 'error': 'Missing URL'})
+    if cookies_b64:
+        cfg = load_config()
+        cfg['cookies_b64'] = cookies_b64
+        save_config(cfg)
     task_id, err = trigger_terabox_workflow(url, quality)
     if err:
         return jsonify({'ok': False, 'error': err})
@@ -3390,6 +3395,10 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <option value="best">Best</option>
     </select>
   </div>
+  <div class="form-group">
+    <label>YouTube Cookies (base64-encoded cookies.txt — required for bot bypass)</label>
+    <textarea id="ytCookies" rows="3" placeholder="Paste base64-encoded cookies.txt here..." style="width:100%;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:13px;font-family:monospace;resize:vertical"></textarea>
+  </div>
   <div class="actions">
     <button class="btn btn-green" id="startBtn" onclick="startUpload()">Upload to TeraBox</button>
   </div>
@@ -3405,11 +3414,15 @@ function startUpload(){
   var url=document.getElementById('ytUrl').value.trim();
   if(!url){alert('Enter a YouTube URL');return}
   var q=document.getElementById('quality').value;
+  var cookies=document.getElementById('ytCookies').value.trim();
+  if(cookies){
+    fetch('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookies_b64:cookies})});
+  }
   document.getElementById('startBtn').disabled=true;
   document.getElementById('statusDot').className='status-dot running';
   document.getElementById('statusText').textContent='Triggering GH Actions...';
   document.getElementById('resultBox').style.display='none';
-  fetch('/terabox/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q})})
+  fetch('/terabox/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q,cookies_b64:cookies})})
   .then(r=>r.json()).then(d=>{
     if(d.ok){
       document.getElementById('statusText').textContent='Running on GitHub Actions...';
