@@ -1384,6 +1384,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>📡 Stream Panel</h1>
@@ -1666,6 +1667,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Twitch Stream Panel</h1>
@@ -1927,6 +1929,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>YouTube Stream Panel</h1>
@@ -2170,6 +2173,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>TikTok Stream Panel <span style="font-size:13px;color:#8b949e;font-weight:normal">(via Restream)</span></h1>
@@ -2401,6 +2405,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Facebook</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Facebook Stream Panel</h1>
@@ -2623,6 +2628,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>FB-Now Stream Panel</h1>
@@ -2848,6 +2854,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Download</a>
   <a href="/chat" style="padding:8px 16px;background:#7c3aed;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Chat</a>
 </div>
 <h1>Chat Overlay Generator</h1>
@@ -3539,6 +3546,179 @@ def file_store_delete(name):
         log(f'File deleted: {name}')
     return jsonify({'ok': True})
 
+
+DOWNLOAD_REPO = 'yt-downloader'
+DOWNLOAD_WORKFLOW = 'download.yml'
+
+def trigger_download_workflow(source_url, quality='720p'):
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    if not token or not owner:
+        return None, 'Missing GitHub config'
+    url = f'https://api.github.com/repos/{owner}/{DOWNLOAD_REPO}/actions/workflows/{DOWNLOAD_WORKFLOW}/dispatches'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    inputs = {'url': source_url, 'quality': quality}
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if cookies_b64:
+        inputs['cookies_b64'] = cookies_b64
+    data = {'ref': 'main', 'inputs': inputs}
+    r = requests.post(url, json=data, headers=headers)
+    if r.status_code not in (204, 201, 200):
+        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
+    return True, None
+
+def get_download_run(token, owner):
+    url = f'https://api.github.com/repos/{owner}/{DOWNLOAD_REPO}/actions/workflows/{DOWNLOAD_WORKFLOW}/runs?per_page=3&event=workflow_dispatch'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        for run in r.json().get('workflow_runs', []):
+            if run['status'] in ('in_progress', 'queued', 'pending'):
+                return run
+    return None
+
+@app.route('/yt-download')
+def yt_download_index():
+    return HTML_YT_DOWNLOAD_PANEL
+
+@app.route('/yt-download/start', methods=['POST'])
+def yt_download_start():
+    data = request.get_json(force=True)
+    url = data.get('url', '').strip()
+    quality = data.get('quality', '720p')
+    if not url:
+        return jsonify({'ok': False, 'error': 'Missing URL'})
+    result, err = trigger_download_workflow(url, quality)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    run = get_download_run(token, owner)
+    run_url = run['html_url'] if run else f'https://github.com/{owner}/{DOWNLOAD_REPO}/actions'
+    return jsonify({'ok': True, 'run_url': run_url, 'msg': 'Download started — check the run page for the artifact'})
+
+HTML_YT_DOWNLOAD_PANEL = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YouTube Downloader</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9}
+.container{max-width:700px;margin:0 auto;padding:20px}
+h1{font-size:22px;margin-bottom:12px;color:#fff}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#8b949e;margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.form-group textarea{font-family:monospace;font-size:13px;resize:vertical}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#58a6ff}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover:not(:disabled){background:#2ea043}
+.btn-blue{background:#1f6feb;color:#fff}
+.btn-blue:hover:not(:disabled){background:#388bfd}
+.btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+.status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.running{background:#f0883e;box-shadow:0 0 8px #f0883e;animation:pulse 1.5s infinite}
+.status-dot.done{background:#3fb950;box-shadow:0 0 8px #3fb950}
+.status-dot.error{background:#f85149}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.result-box{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:16px;margin-top:12px;display:none}
+.result-box a{color:#58a6ff;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  <a href="/" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
+  <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
+  <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/yt-download" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Download</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
+</div>
+<h1>YouTube Downloader</h1>
+<p style="color:#8b949e;margin-bottom:16px;font-size:14px">Download any YouTube video to your PC via GitHub Actions bandwidth. Click the link below when done, then click "Download artifact".</p>
+<div class="status-bar">
+  <span><span class="status-dot" id="statusDot"></span><span id="statusText">Idle</span></span>
+</div>
+<div class="card">
+  <h2>Download YouTube Video</h2>
+  <div class="form-group">
+    <label>YouTube URL</label>
+    <input type="url" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+  </div>
+  <div class="form-group">
+    <label>Quality</label>
+    <select id="quality">
+      <option value="360p">360p</option>
+      <option value="480p">480p</option>
+      <option value="720p" selected>720p</option>
+      <option value="1080p">1080p</option>
+      <option value="best">Best</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>YouTube Cookies (base64 — required for bot bypass)</label>
+    <textarea id="ytCookies" rows="3" placeholder="Paste base64-encoded cookies.txt here..."></textarea>
+  </div>
+  <div class="actions">
+    <button class="btn btn-green" id="startBtn" onclick="startDownload()">Download via GitHub</button>
+  </div>
+</div>
+<div class="result-box" id="resultBox">
+  <h2 style="margin-bottom:8px">Download started!</h2>
+  <p style="margin-bottom:8px">When the run finishes, click the link below, then click <b>"Download artifact"</b> to save the .mp4 to your PC.</p>
+  <p><a id="runUrl" href="#" target="_blank">Open GitHub Actions run</a></p>
+  <p style="margin-top:12px;color:#8b949e;font-size:13px">Takes 2-15 minutes depending on video length. Refresh the page to check status.</p>
+</div>
+</div>
+<script>
+function startDownload(){
+  var url=document.getElementById('ytUrl').value.trim();
+  if(!url){alert('Enter a YouTube URL');return}
+  var q=document.getElementById('quality').value;
+  var cookies=document.getElementById('ytCookies').value.trim();
+  if(cookies){
+    fetch('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookies_b64:cookies})});
+  }
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('statusDot').className='status-dot running';
+  document.getElementById('statusText').textContent='Starting GitHub Actions download...';
+  document.getElementById('resultBox').style.display='none';
+  fetch('/yt-download/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q,cookies_b64:cookies})})
+  .then(r=>r.json()).then(d=>{
+    if(d.ok){
+      document.getElementById('statusDot').className='status-dot done';
+      document.getElementById('statusText').textContent='Download started! Check the link below.';
+      document.getElementById('runUrl').href=d.run_url;
+      document.getElementById('resultBox').style.display='block';
+      document.getElementById('startBtn').disabled=false;
+    } else {
+      document.getElementById('statusDot').className='status-dot error';
+      document.getElementById('statusText').textContent='Error: '+(d.error||'unknown');
+      document.getElementById('startBtn').disabled=false;
+    }
+  }).catch(e=>{
+    document.getElementById('statusDot').className='status-dot error';
+    document.getElementById('statusText').textContent='Error: '+e;
+    document.getElementById('startBtn').disabled=false;
+  });
+}
+</script>
+</body>
+</html>'''
 
 if __name__ == '__main__':
     init_wanted()
