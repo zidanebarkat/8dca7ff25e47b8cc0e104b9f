@@ -294,11 +294,13 @@ def trigger_tt_workflow(source_url, tiktok_key):
         return None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    output_url = tiktok_key if tiktok_key.startswith(('rtmp', 'srt')) else f'rtmp://push-fs-hsc.pull-ttok.com/ingest/{tiktok_key}'
-    cookies_b64 = cfg.get('cookies_b64', '').strip()
-    if not cookies_b64 and cfg.get('yt_cookies'):
+    key = tiktok_key.strip()
+    output_url = key if key.startswith(('rtmp://', 'srt://')) else f'rtmp://push-fs-hsc.pull-ttok.com/ingest/{key}'
+    cookies_b64 = ''
+    raw_cookies = cfg.get('yt_cookies', '')
+    if raw_cookies:
         import base64, json
-        raw = cfg['yt_cookies'].strip()
+        raw = raw_cookies.strip()
         if raw.startswith('['):
             try:
                 cookies = json.loads(raw)
@@ -542,7 +544,7 @@ def tt_keepalive_loop():
             if tt_wanted and cfg.get('tt_keepalive'):
                 token = cfg.get('github_token')
                 owner = cfg.get('github_owner')
-                repo = cfg.get('tt_repo')
+                repo = cfg.get('github_repo')
                 if token and owner and repo:
                     run_id = get_active_run(token, owner, repo)
                     if not run_id:
@@ -646,8 +648,13 @@ def get_logs():
     with log_lock:
         return '\n'.join(log_buffer[-100:]), 200, {'Content-Type': 'text/plain'}
 
+_VIDEO_EXTS = ('.mp4', '.m3u8', '.ts', '.flv', '.mkv', '.webm', '.mp3', '.aac', '.ogg')
+
 def do_resolve(url, cfg):
     import subprocess
+    low = url.lower().split('?')[0]
+    if low.endswith(_VIDEO_EXTS) or '/video/' in low:
+        return url, False
     base = ['yt-dlp', '--socket-timeout', '15']
     for fmt in [['--format', 'best'], ['--format', 'worst']]:
         try:
@@ -844,7 +851,7 @@ def tt_status():
     cfg = load_config()
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
-    repo = cfg.get('tt_repo')
+    repo = cfg.get('github_repo')
     live = False
     run_id = None
     if token and owner and repo:
@@ -876,7 +883,7 @@ def tt_stop():
     save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
-    repo = cfg.get('tt_repo')
+    repo = cfg.get('github_repo')
     if not token or not owner or not repo:
         return jsonify({'ok': False, 'error': 'GitHub not configured'})
     run_id = get_active_run(token, owner, repo)
@@ -1376,6 +1383,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>📡 Stream Panel</h1>
@@ -1402,8 +1410,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL</label>
-    <input type="url" name="source_url" id="source_url" placeholder="YouTube, Twitch, Kick URL (any live stream)">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="url" name="source_url" id="source_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
   </div>
   <div class="form-group">
     <label>Stream Title</label>
@@ -1657,6 +1665,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Twitch Stream Panel</h1>
@@ -1683,8 +1692,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
     <div class="form-group">
-      <label>Source URL (Twitch or YouTube)</label>
-      <input type="url" name="twt_url" id="twt_url" placeholder="https://www.twitch.tv/streamer or https://youtube.com/watch?v=...">
+      <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+      <input type="url" name="twt_url" id="twt_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
     </div>
   <div class="form-group">
     <label>Twitch Client ID</label>
@@ -1917,6 +1926,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>YouTube Stream Panel</h1>
@@ -1943,8 +1953,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (Twitch)</label>
-    <input type="url" name="yt_url" id="yt_url" placeholder="https://www.twitch.tv/streamer">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="url" name="yt_url" id="yt_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
   </div>
   <div class="form-group">
     <label>YouTube Stream Key</label>
@@ -2159,6 +2169,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#d43089;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>TikTok Stream Panel <span style="font-size:13px;color:#8b949e;font-weight:normal">(via Restream)</span></h1>
@@ -2185,8 +2196,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (YouTube, Twitch, etc.)</label>
-    <input type="url" name="tt_url" id="tt_url" placeholder="https://www.youtube.com/watch?v=...">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="url" name="tt_url" id="tt_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
   </div>
   <div class="form-group">
     <label>Restream RTMP URL</label>
@@ -2389,6 +2400,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Facebook</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>Facebook Stream Panel</h1>
@@ -2415,8 +2427,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (Twitch)</label>
-    <input type="url" name="fb_url" id="fb_url" placeholder="https://www.twitch.tv/streamer">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="url" name="fb_url" id="fb_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
   </div>
   <div class="form-group">
     <label>Facebook Stream Key</label>
@@ -2610,6 +2622,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>FB-Now Stream Panel</h1>
@@ -2637,8 +2650,8 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 <div class="card">
   <h2>Stream Config</h2>
   <div class="form-group">
-    <label>Source URL (YouTube, Twitch, etc.)</label>
-    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="https://www.youtube.com/watch?v=...">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="url" name="fb_now_url" id="fb_now_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
   </div>
   <div class="form-group">
     <label>Facebook Stream Key</label>
@@ -2834,6 +2847,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#7c3aed;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Chat</a>
 </div>
 <h1>Chat Overlay Generator</h1>
@@ -3116,14 +3130,14 @@ textarea{resize:vertical;min-height:60px;font-family:monospace;font-size:11px}
 <body>
 <div class="card">
   <h1>KICK Chill</h1>
-  <p class="subtitle">Stream any YouTube video 24/7 to Kick</p>
+  <p class="subtitle">Stream any video 24/7 to Kick</p>
   <div class="status">
     <span class="dot" id="dot"></span>
     <span id="statusText" style="font-size:13px">Checking...</span>
   </div>
   <div class="field">
-    <label>YouTube URL</label>
-    <input type="text" id="kc_url" placeholder="https://www.youtube.com/watch?v=...">
+    <label>Source URL (Kick, Twitch, YouTube, or video URL)</label>
+    <input type="text" id="kc_url" placeholder="https://kick.com/... or https://twitch.tv/... or https://youtube.com/watch?v=... or .mp4/.m3u8 URL">
     <div class="hint">Live streams loop forever. Videos download then loop.</div>
   </div>
   <div class="field">
@@ -3205,6 +3219,314 @@ pollTimer = setInterval(poll, 5000);
 </script>
 </body>
 </html>'''
+
+# ── TeraBox Upload ─────────────────────────────────────────────
+
+TERABOX_REPO = 'zidanebarkat/terabox-uploader'
+TERABOX_WORKFLOW = 'upload.yml'
+
+def trigger_terabox_workflow(source_url, quality='720p'):
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    if not token or not owner:
+        return None, 'Missing GitHub config'
+    url = f'https://api.github.com/repos/{owner}/{TERABOX_REPO}/actions/workflows/{TERABOX_WORKFLOW}/dispatches'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    import hashlib
+    task_id = 'tb_' + hashlib.md5(source_url.encode()).hexdigest()[:8]
+    inputs = {'url': source_url, 'quality': quality, 'task_id': task_id}
+    cookies_b64 = cfg.get('cookies_b64', '').strip()
+    if cookies_b64:
+        inputs['cookies_b64'] = cookies_b64
+    data = {'ref': 'main', 'inputs': inputs}
+    r = requests.post(url, json=data, headers=headers)
+    if r.status_code not in (204, 201, 200):
+        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
+    return task_id, None
+
+def get_terabox_run(token, owner):
+    url = f'https://api.github.com/repos/{owner}/{TERABOX_REPO}/actions/workflows/{TERABOX_WORKFLOW}/runs?per_page=5&event=workflow_dispatch'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        for run in r.json().get('workflow_runs', []):
+            if run['status'] in ('in_progress', 'queued', 'pending'):
+                return run
+    return None
+
+def get_terabox_run_detail(run_id, token, owner):
+    url = f'https://api.github.com/repos/{owner}/{TERABOX_REPO}/actions/runs/{run_id}/jobs'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        return r.json()
+    return None
+
+def get_terabox_run_logs(run_id, token, owner):
+    url = f'https://api.github.com/repos/{owner}/{TERABOX_REPO}/actions/runs/{run_id}/logs'
+    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        return r.text
+    return ''
+
+@app.route('/terabox')
+def terabox_index():
+    return HTML_TERABOX_PANEL
+
+@app.route('/terabox/status')
+def terabox_status():
+    cfg = load_config()
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    running = False
+    run_info = None
+    share_url = None
+    if token and owner:
+        run = get_terabox_run(token, owner)
+        if run:
+            running = True
+            run_info = {
+                'id': run['id'],
+                'status': run['status'],
+                'conclusion': run.get('conclusion'),
+                'created_at': run.get('created_at', ''),
+                'updated_at': run.get('updated_at', ''),
+            }
+            if run['status'] == 'completed' and run.get('conclusion') == 'success':
+                logs = get_terabox_run_logs(run['id'], token, owner)
+                import re as _re
+                for line in logs.split('\n'):
+                    if 'Share URL:' in line or 'DONE:' in line:
+                        parts = line.split('Share URL:' if 'Share URL:' in line else 'DONE:')
+                        if len(parts) > 1:
+                            txt = parts[-1].strip()
+                            m = _re.search(r'https?://\S+', txt)
+                            if m:
+                                share_url = m.group(0)
+                                break
+    return jsonify({'running': running, 'run': run_info, 'share_url': share_url})
+
+@app.route('/terabox/start', methods=['POST'])
+def terabox_start():
+    data = request.get_json(force=True)
+    url = data.get('url', '').strip()
+    quality = data.get('quality', '720p')
+    if not url:
+        return jsonify({'ok': False, 'error': 'Missing URL'})
+    task_id, err = trigger_terabox_workflow(url, quality)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    return jsonify({'ok': True, 'task_id': task_id, 'msg': 'GH Actions workflow triggered'})
+
+HTML_TERABOX_PANEL = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TeraBox Uploader</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0d1117;color:#c9d1d9}
+.container{max-width:900px;margin:0 auto;padding:20px}
+h1{font-size:22px;margin-bottom:20px;color:#fff}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:12px;color:#f0f6fc}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:13px;color:#8b949e;margin-bottom:4px}
+.form-group input,.form-group select{width:100%;padding:8px 12px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#58a6ff}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover:not(:disabled){background:#2ea043}
+.btn-grey{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-grey:hover:not(:disabled){background:#30363d}
+.btn-blue{background:#1f6feb;color:#fff}
+.btn-blue:hover:not(:disabled){background:#388bfd}
+.actions{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+.status-bar{display:flex;align-items:center;gap:16px;padding:12px 16px;background:#0d1117;border:1px solid #30363d;border-radius:6px;margin-bottom:16px}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.running{background:#f0883e;box-shadow:0 0 8px #f0883e;animation:pulse 1.5s infinite}
+.status-dot.done{background:#3fb950;box-shadow:0 0 8px #3fb950}
+.status-dot.error{background:#f85149}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.result-box{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:16px;margin-top:12px;display:none}
+.result-box a{color:#58a6ff;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="container">
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  <a href="/" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Kick</a>
+  <a href="/yt" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">YouTube</a>
+  <a href="/twitch" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Twitch</a>
+  <a href="/tiktok" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TikTok</a>
+  <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
+  <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
+  <a href="/terabox" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">TeraBox</a>
+  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
+  <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
+</div>
+<h1>TeraBox Uploader</h1>
+<p style="color:#8b949e;margin-bottom:16px;font-size:14px">YouTube video → download on GitHub Actions (2 CPU, 7GB RAM) → upload to TeraBox → get share link</p>
+<div class="status-bar">
+  <span><span class="status-dot" id="statusDot"></span><span id="statusText">Idle</span></span>
+  <span id="runTime" style="color:#8b949e;font-size:13px"></span>
+</div>
+<div class="card">
+  <h2>Upload YouTube to TeraBox</h2>
+  <div class="form-group">
+    <label>YouTube URL</label>
+    <input type="url" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+  </div>
+  <div class="form-group">
+    <label>Quality</label>
+    <select id="quality">
+      <option value="360p">360p</option>
+      <option value="480p">480p</option>
+      <option value="720p" selected>720p (recommended)</option>
+      <option value="1080p">1080p</option>
+      <option value="best">Best</option>
+    </select>
+  </div>
+  <div class="actions">
+    <button class="btn btn-green" id="startBtn" onclick="startUpload()">Upload to TeraBox</button>
+  </div>
+</div>
+<div class="result-box" id="resultBox">
+  <h2 style="margin-bottom:8px">Share URL</h2>
+  <p><a id="shareUrl" href="#" target="_blank"></a></p>
+  <button class="btn btn-grey btn-sm" style="margin-top:12px" onclick="copyUrl()">Copy URL</button>
+</div>
+</div>
+<script>
+function startUpload(){
+  var url=document.getElementById('ytUrl').value.trim();
+  if(!url){alert('Enter a YouTube URL');return}
+  var q=document.getElementById('quality').value;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('statusDot').className='status-dot running';
+  document.getElementById('statusText').textContent='Triggering GH Actions...';
+  document.getElementById('resultBox').style.display='none';
+  fetch('/terabox/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q})})
+  .then(r=>r.json()).then(d=>{
+    if(d.ok){
+      document.getElementById('statusText').textContent='Running on GitHub Actions...';
+      pollStatus();
+    } else {
+      document.getElementById('statusDot').className='status-dot error';
+      document.getElementById('statusText').textContent='Error: '+(d.error||'unknown');
+      document.getElementById('startBtn').disabled=false;
+    }
+  }).catch(e=>{
+    document.getElementById('statusDot').className='status-dot error';
+    document.getElementById('statusText').textContent='Network error';
+    document.getElementById('startBtn').disabled=false;
+  });
+}
+var pollTimer=null;
+function pollStatus(){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(()=>{
+    fetch('/terabox/status').then(r=>r.json()).then(d=>{
+      if(d.share_url){
+        clearInterval(pollTimer);
+        document.getElementById('statusDot').className='status-dot done';
+        document.getElementById('statusText').textContent='Upload complete!';
+        document.getElementById('resultBox').style.display='block';
+        document.getElementById('shareUrl').href=d.share_url;
+        document.getElementById('shareUrl').textContent=d.share_url;
+        document.getElementById('startBtn').disabled=false;
+      } else if(d.running){
+        document.getElementById('statusDot').className='status-dot running';
+        document.getElementById('statusText').textContent='Running... ('+d.run.status+')';
+      } else {
+        clearInterval(pollTimer);
+        document.getElementById('statusDot').className='status-dot';
+        document.getElementById('statusText').textContent='Idle';
+        document.getElementById('startBtn').disabled=false;
+      }
+    }).catch(()=>{});
+  },10000);
+}
+function copyUrl(){
+  navigator.clipboard.writeText(document.getElementById('shareUrl').textContent);
+}
+fetch('/terabox/status').then(r=>r.json()).then(d=>{
+  if(d.running){document.getElementById('startBtn').disabled=false;pollStatus();}
+  if(d.share_url){
+    document.getElementById('resultBox').style.display='block';
+    document.getElementById('shareUrl').href=d.share_url;
+    document.getElementById('shareUrl').textContent=d.share_url;
+  }
+});
+</script>
+</body>
+</html>'''
+
+# ── File Store (persistent upload from yt-proxy) ─────────────────
+import uuid as _uuid
+
+FILE_STORE_DIR = os.path.join(os.path.dirname(__file__), 'file_store')
+os.makedirs(FILE_STORE_DIR, exist_ok=True)
+
+@app.route('/api/file-store/upload', methods=['POST'])
+def file_store_upload():
+    if 'file' in request.files:
+        f = request.files['file']
+        name = f.filename or f'{_uuid.uuid4().hex[:8]}.mp4'
+        path = os.path.join(FILE_STORE_DIR, name)
+        f.save(path)
+        size_mb = round(os.path.getsize(path) / 1024 / 1024, 1)
+        url = f'{request.host_url}api/file-store/serve/{name}'
+        log(f'File stored: {name} ({size_mb} MB)')
+        return jsonify({'ok': True, 'url': url, 'name': name, 'size_mb': size_mb})
+
+    data = request.get_json(force=True) if request.is_json else None
+    if data and data.get('name') and data.get('content_b64'):
+        import base64
+        name = data['name']
+        content = base64.b64decode(data['content_b64'])
+        path = os.path.join(FILE_STORE_DIR, name)
+        with open(path, 'wb') as fh:
+            fh.write(content)
+        size_mb = round(os.path.getsize(path) / 1024 / 1024, 1)
+        url = f'{request.host_url}api/file-store/serve/{name}'
+        log(f'File stored (b64): {name} ({size_mb} MB)')
+        return jsonify({'ok': True, 'url': url, 'name': name, 'size_mb': size_mb})
+
+    return jsonify({'ok': False, 'error': 'Send file or JSON {name, content_b64}'}), 400
+
+
+@app.route('/api/file-store/serve/<name>')
+def file_store_serve(name):
+    path = os.path.join(FILE_STORE_DIR, name)
+    if not os.path.exists(path):
+        return 'Not found', 404
+    from flask import send_file
+    return send_file(path, mimetype='video/mp4')
+
+
+@app.route('/api/file-store/list')
+def file_store_list():
+    files = []
+    for f in sorted(os.listdir(FILE_STORE_DIR)):
+        fp = os.path.join(FILE_STORE_DIR, f)
+        if os.path.isfile(fp):
+            files.append({'name': f, 'size_mb': round(os.path.getsize(fp) / 1024 / 1024, 1), 'url': f'{request.host_url}api/file-store/serve/{f}'})
+    return jsonify({'ok': True, 'files': files, 'count': len(files)})
+
+
+@app.route('/api/file-store/delete/<name>', methods=['DELETE'])
+def file_store_delete(name):
+    path = os.path.join(FILE_STORE_DIR, name)
+    if os.path.exists(path):
+        os.remove(path)
+        log(f'File deleted: {name}')
+    return jsonify({'ok': True})
+
 
 if __name__ == '__main__':
     init_wanted()
