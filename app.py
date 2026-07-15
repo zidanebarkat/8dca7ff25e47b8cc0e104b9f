@@ -3236,9 +3236,6 @@ def trigger_terabox_workflow(source_url, quality='720p'):
     import hashlib
     task_id = 'tb_' + hashlib.md5(source_url.encode()).hexdigest()[:8]
     inputs = {'url': source_url, 'quality': quality, 'task_id': task_id}
-    cookies_b64 = cfg.get('cookies_b64', '').strip()
-    if cookies_b64:
-        inputs['cookies_b64'] = cookies_b64
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
     if r.status_code not in (204, 201, 200):
