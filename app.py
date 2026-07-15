@@ -3222,7 +3222,7 @@ pollTimer = setInterval(poll, 5000);
 
 # ── TeraBox Upload ─────────────────────────────────────────────
 
-TERABOX_REPO = 'zidanebarkat/terabox-uploader'
+TERABOX_REPO = 'terabox-uploader'
 TERABOX_WORKFLOW = 'upload.yml'
 
 def trigger_terabox_workflow(source_url, quality='720p'):
@@ -3366,7 +3366,6 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/facebook" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Facebook</a>
   <a href="/fb-now" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">FB-Now</a>
   <a href="/terabox" style="padding:8px 16px;background:#1f6feb;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">TeraBox</a>
-  <a href="/terabox" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">TeraBox</a>
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>TeraBox Uploader</h1>
