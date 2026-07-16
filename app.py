@@ -3547,36 +3547,7 @@ def file_store_delete(name):
     return jsonify({'ok': True})
 
 
-DOWNLOAD_REPO = 'yt-downloader'
-DOWNLOAD_WORKFLOW = 'download.yml'
-
-def trigger_download_workflow(source_url, quality='720p'):
-    cfg = load_config()
-    token = cfg.get('github_token') or GITHUB_TOKEN
-    owner = cfg.get('github_owner') or GITHUB_OWNER
-    if not token or not owner:
-        return None, 'Missing GitHub config'
-    url = f'https://api.github.com/repos/{owner}/{DOWNLOAD_REPO}/actions/workflows/{DOWNLOAD_WORKFLOW}/dispatches'
-    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    inputs = {'url': source_url, 'quality': quality}
-    cookies_b64 = cfg.get('cookies_b64', '').strip()
-    if cookies_b64:
-        inputs['cookies_b64'] = cookies_b64
-    data = {'ref': 'main', 'inputs': inputs}
-    r = requests.post(url, json=data, headers=headers)
-    if r.status_code not in (204, 201, 200):
-        return None, f'GitHub API error: {r.status_code} {r.text[:200]}'
-    return True, None
-
-def get_download_run(token, owner):
-    url = f'https://api.github.com/repos/{owner}/{DOWNLOAD_REPO}/actions/workflows/{DOWNLOAD_WORKFLOW}/runs?per_page=3&event=workflow_dispatch'
-    headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
-    r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        for run in r.json().get('workflow_runs', []):
-            if run['status'] in ('in_progress', 'queued', 'pending'):
-                return run
-    return None
+RENDER_PROXY = 'https://yt-proxy-2j0r.onrender.com'
 
 @app.route('/yt-download')
 def yt_download_index():
@@ -3594,15 +3565,38 @@ def yt_download_start():
         cfg = load_config()
         cfg['cookies_b64'] = cookies_b64
         save_config(cfg)
-    result, err = trigger_download_workflow(url, quality)
-    if err:
-        return jsonify({'ok': False, 'error': err})
-    cfg = load_config()
-    token = cfg.get('github_token') or GITHUB_TOKEN
-    owner = cfg.get('github_owner') or GITHUB_OWNER
-    run = get_download_run(token, owner)
-    run_url = run['html_url'] if run else f'https://github.com/{owner}/{DOWNLOAD_REPO}/actions'
-    return jsonify({'ok': True, 'run_url': run_url, 'msg': 'Download started — check the run page for the artifact'})
+    try:
+        if cookies_b64:
+            import base64
+            try:
+                cookie_data = base64.b64decode(cookies_b64)
+                requests.post(f'{RENDER_PROXY}/api/upload_cookies', data=cookie_data, headers={'Content-Type': 'text/plain'}, timeout=15)
+            except Exception:
+                pass
+        r = requests.post(f'{RENDER_PROXY}/api/download', json={'url': url, 'quality': quality}, timeout=30)
+        resp = r.json()
+        if resp.get('ok'):
+            task_id = resp['task_id']
+            return jsonify({'ok': True, 'task_id': task_id, 'msg': 'Download started on Render.com proxy'})
+        return jsonify({'ok': False, 'error': resp.get('error', 'Unknown error')})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/yt-download/status/<task_id>')
+def yt_download_status(task_id):
+    try:
+        r = requests.get(f'{RENDER_PROXY}/api/progress/{task_id}', timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            status = resp.get('status', 'unknown')
+            percent = resp.get('percent', 0)
+            if status == 'done':
+                video_url = f'{RENDER_PROXY}/video/{task_id}.mp4'
+                return jsonify({'ok': True, 'status': 'done', 'video_url': video_url, 'percent': 100})
+            return jsonify({'ok': True, 'status': status, 'percent': percent, 'speed': resp.get('speed', ''), 'eta': resp.get('eta', '')})
+        return jsonify({'ok': False, 'error': resp.get('error', 'Unknown')})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 HTML_YT_DOWNLOAD_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
@@ -3679,17 +3673,18 @@ h1{font-size:22px;margin-bottom:12px;color:#fff}
     <textarea id="ytCookies" rows="3" placeholder="Paste base64-encoded cookies.txt here..."></textarea>
   </div>
   <div class="actions">
-    <button class="btn btn-green" id="startBtn" onclick="startDownload()">Download via GitHub</button>
+    <button class="btn btn-green" id="startBtn" onclick="startDownload()">Download via Render.com</button>
   </div>
 </div>
 <div class="result-box" id="resultBox">
   <h2 style="margin-bottom:8px">Download started!</h2>
-  <p style="margin-bottom:8px">When the run finishes, click the link below, then click <b>"Download artifact"</b> to save the .mp4 to your PC.</p>
-  <p><a id="runUrl" href="#" target="_blank">Open GitHub Actions run</a></p>
-  <p style="margin-top:12px;color:#8b949e;font-size:13px">Takes 2-15 minutes depending on video length. Refresh the page to check status.</p>
+  <div id="progressInfo" style="margin-bottom:8px;color:#8b949e;font-size:14px"></div>
+  <p><a id="downloadUrl" href="#" target="_blank" style="display:none;font-size:18px;font-weight:600">Download .mp4</a></p>
+  <p style="margin-top:12px;color:#8b949e;font-size:13px">Downloading on Render.com (fast residential IPs). Click the link when ready.</p>
 </div>
 </div>
 <script>
+var pollTimer=null;
 function startDownload(){
   var url=document.getElementById('ytUrl').value.trim();
   if(!url){alert('Enter a YouTube URL');return}
@@ -3700,26 +3695,51 @@ function startDownload(){
   }
   document.getElementById('startBtn').disabled=true;
   document.getElementById('statusDot').className='status-dot running';
-  document.getElementById('statusText').textContent='Starting GitHub Actions download...';
-  document.getElementById('resultBox').style.display='none';
+  document.getElementById('statusText').textContent='Starting download on Render.com...';
+  document.getElementById('resultBox').style.display='block';
+  document.getElementById('downloadUrl').style.display='none';
+  document.getElementById('progressInfo').textContent='Connecting...';
   fetch('/yt-download/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q,cookies_b64:cookies})})
   .then(r=>r.json()).then(d=>{
     if(d.ok){
-      document.getElementById('statusDot').className='status-dot done';
-      document.getElementById('statusText').textContent='Download started! Check the link below.';
-      document.getElementById('runUrl').href=d.run_url;
-      document.getElementById('resultBox').style.display='block';
-      document.getElementById('startBtn').disabled=false;
+      document.getElementById('statusText').textContent='Downloading on Render.com...';
+      pollStatus(d.task_id);
     } else {
       document.getElementById('statusDot').className='status-dot error';
       document.getElementById('statusText').textContent='Error: '+(d.error||'unknown');
       document.getElementById('startBtn').disabled=false;
+      document.getElementById('progressInfo').textContent='';
     }
   }).catch(e=>{
     document.getElementById('statusDot').className='status-dot error';
     document.getElementById('statusText').textContent='Error: '+e;
     document.getElementById('startBtn').disabled=false;
   });
+}
+function pollStatus(taskId){
+  if(pollTimer)clearTimeout(pollTimer);
+  fetch('/yt-download/status/'+taskId).then(r=>r.json()).then(d=>{
+    if(!d.ok){document.getElementById('progressInfo').textContent='Error: '+(d.error||'unknown');return}
+    if(d.status==='done'){
+      document.getElementById('statusDot').className='status-dot done';
+      document.getElementById('statusText').textContent='Download complete!';
+      document.getElementById('progressInfo').textContent='100% — Ready to download';
+      document.getElementById('downloadUrl').href=d.video_url;
+      document.getElementById('downloadUrl').style.display='inline-block';
+      document.getElementById('startBtn').disabled=false;
+      return;
+    }
+    var pct=d.percent||0;
+    var info=pct.toFixed(1)+'%';
+    if(d.speed)info+=' — '+d.speed;
+    if(d.eta)info+=' — ETA '+d.eta;
+    document.getElementById('progressInfo').textContent=info;
+    pollTimer=setTimeout(function(){pollStatus(taskId)},3000);
+  }).catch(e=>{
+    document.getElementById('progressInfo').textContent='Polling...';
+    pollTimer=setTimeout(function(){pollStatus(taskId)},5000);
+  });
+}
 }
 </script>
 </body>
