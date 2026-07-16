@@ -3587,8 +3587,13 @@ def yt_download_start():
     data = request.get_json(force=True)
     url = data.get('url', '').strip()
     quality = data.get('quality', '720p')
+    cookies_b64 = data.get('cookies_b64', '').strip()
     if not url:
         return jsonify({'ok': False, 'error': 'Missing URL'})
+    if cookies_b64:
+        cfg = load_config()
+        cfg['cookies_b64'] = cookies_b64
+        save_config(cfg)
     result, err = trigger_download_workflow(url, quality)
     if err:
         return jsonify({'ok': False, 'error': err})
