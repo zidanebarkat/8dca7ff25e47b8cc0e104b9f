@@ -166,12 +166,36 @@ def trigger_workflow(source_url, output_url, preview=False):
         return None, None, 'Missing GitHub config'
     url = f'https://api.github.com/repos/{owner}/{repo}/actions/workflows/restream.yml/dispatches'
     headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github.v3+json'}
+    cookies_b64 = ''
+    raw_cookies = cfg.get('yt_cookies', '')
+    if raw_cookies:
+        import base64, json
+        raw = raw_cookies.strip()
+        if raw.startswith('['):
+            try:
+                cookies = json.loads(raw)
+                lines = ['# Netscape HTTP Cookie File']
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    flag = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expirationDate', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    httponly = '#HttpOnly_' if c.get('httpOnly', False) else ''
+                    lines.append(f'{httponly}{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}')
+                raw = '\n'.join(lines) + '\n'
+            except:
+                pass
+        cookies_b64 = base64.b64encode(raw.encode()).decode()
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
         'overlay_text': cfg.get('overlay_text', ''),
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
+        'cookies_b64': cookies_b64,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
