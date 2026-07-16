@@ -32,6 +32,18 @@ on:
         description: Base64-encoded cookies.txt for YouTube sources
         required: false
         default: ''
+      output_urls:
+        description: Extra output URLs, newline-separated (multi-stream)
+        required: false
+        default: ''
+      account_names:
+        description: Account names matching output_url + output_urls order, newline-separated
+        required: false
+        default: ''
+      heartbeat_url:
+        description: URL to POST multi-stream status heartbeats to
+        required: false
+        default: ''
 
 jobs:
   stream:
@@ -142,23 +154,100 @@ jobs:
             sleep 2
           fi
 
+      - name: Write multi-stream helpers
+        run: |
+          cat > /tmp/ms_helpers.sh << 'HELPERS_EOF'
+          ms_build() {
+            local primary="$1" extra="$2" names_in="$3"
+            URLS=("$primary")
+            while IFS= read -r u; do [ -n "$u" ] && URLS+=("$u"); done <<< "$extra"
+
+            NAMES=()
+            while IFS= read -r n; do NAMES+=("$n"); done <<< "$names_in"
+            for i in "${!URLS[@]}"; do
+              NAMES[$i]="${NAMES[$i]:-Account $((i+1))}"
+            done
+
+            HASHES=()
+            for u in "${URLS[@]}"; do
+              HASHES+=("$(printf '%s' "$u" | sha256sum | cut -c1-8)")
+            done
+
+            TEE_OUT=""
+            for u in "${URLS[@]}"; do
+              if [[ "$u" == srt://* ]]; then
+                TEE_OUT="${TEE_OUT}[f=mpegts:onfail=ignore]${u}|"
+              else
+                TEE_OUT="${TEE_OUT}[f=flv:onfail=ignore]${u}|"
+              fi
+            done
+            TEE_OUT="${TEE_OUT%|}"
+          }
+
+          ms_heartbeat_loop() {
+            local log="$1" hb_url="$2" hb_token="$3" run_id="$4"
+            [ -z "$hb_url" ] && return 0
+            declare -A status
+            for h in "${HASHES[@]}"; do status[$h]="pending"; done
+            local start_ts=$SECONDS
+
+            while true; do
+              sleep 8
+              for i in "${!URLS[@]}"; do
+                u="${URLS[$i]}"; h="${HASHES[$i]}"
+                if [ -f "$log" ] && tail -n 200 "$log" | grep -F "$u" | grep -qiE "error|failed|refused|broken pipe"; then
+                  status[$h]="disconnected"
+                elif [ -f "$log" ] && grep -q "Output #" "$log"; then
+                  status[$h]="connected"
+                fi
+              done
+
+              json_parts=()
+              for i in "${!URLS[@]}"; do
+                h="${HASHES[$i]}"; n="${NAMES[$i]}"; s="${status[$h]}"
+                json_parts+=("$(jq -n --arg h "$h" --arg n "$n" --arg s "$s" '{url_hash:$h,name:$n,status:$s}')")
+              done
+              accounts_json=$(printf '%s\n' "${json_parts[@]}" | jq -s '.')
+              uptime=$((SECONDS - start_ts))
+
+              curl -s --max-time 5 -X POST "$hb_url" \
+                -H "Content-Type: application/json" \
+                -H "X-Heartbeat-Token: $hb_token" \
+                -d "$(jq -n --arg rid "$run_id" --argjson accts "$accounts_json" --argjson up "$uptime" \
+                      '{run_id:$rid, accounts:$accts, uptime_seconds:$up}')" \
+                -o /dev/null || true
+            done
+          }
+          HELPERS_EOF
+
       - name: Schedule self-reboot (before 6h limit)
         if: inputs.github_token != '' && inputs.preview != 'true'
         run: |
           TRIGGER_WORKFLOW() {
+            PAYLOAD=$(jq -n \
+              --arg source_url "${{ inputs.source_url }}" \
+              --arg output_url "${{ inputs.output_url }}" \
+              --arg overlay_text "${{ inputs.overlay_text }}" \
+              --arg overlay_channel "${{ inputs.overlay_channel }}" \
+              --arg browser_overlay_url "${{ inputs.browser_overlay_url }}" \
+              --arg github_token "${{ inputs.github_token }}" \
+              --arg cookies_b64 "${{ inputs.cookies_b64 }}" \
+              --arg output_urls "${{ inputs.output_urls }}" \
+              --arg account_names "${{ inputs.account_names }}" \
+              --arg heartbeat_url "${{ inputs.heartbeat_url }}" \
+              '{ref: "main", inputs: {
+                  source_url: $source_url, output_url: $output_url,
+                  overlay_text: $overlay_text, overlay_channel: $overlay_channel,
+                  browser_overlay_url: $browser_overlay_url, github_token: $github_token,
+                  cookies_b64: $cookies_b64, output_urls: $output_urls,
+                  account_names: $account_names, heartbeat_url: $heartbeat_url
+              }}')
+
             curl -s -X POST \
               -H "Authorization: Bearer ${{ inputs.github_token }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/restream.yml/dispatches" \
-              -d '{"ref":"main","inputs":{
-                "source_url":"${{ inputs.source_url }}",
-                "output_url":"${{ inputs.output_url }}",
-                "overlay_text":"${{ inputs.overlay_text }}",
-                "overlay_channel":"${{ inputs.overlay_channel }}",
-                "browser_overlay_url":"${{ inputs.browser_overlay_url }}",
-                "github_token":"${{ inputs.github_token }}",
-                "cookies_b64":"${{ inputs.cookies_b64 }}"
-              }}'
+              -d "$PAYLOAD"
           }
           (sleep 19800 && for i in 1 2 3; do
             echo "Self-reboot attempt $i at $(date)..."
@@ -221,21 +310,27 @@ jobs:
             -x264-params "keyint=60:min-keyint=60:level=5.1"
             -pix_fmt yuv420p
             -c:a aac -b:a 128k
+            -af loudnorm
           )
-          URL="${{ inputs.output_url }}"
-          if [[ "$URL" == srt://* ]]; then
-            ARGS+=(-f mpegts -pkt_size 1316 "$URL")
-          else
-            ARGS+=(-f flv "$URL")
-          fi
-          ARGS+=(-af loudnorm)
+          source /tmp/ms_helpers.sh
+          ms_build "${{ inputs.output_url }}" "${{ inputs.output_urls }}" "${{ inputs.account_names }}"
+
+          ARGS+=(-f tee "$TEE_OUT")
+
+          FFMPEG_LOG="/tmp/ffmpeg_downloaded.log"
+          ms_heartbeat_loop "$FFMPEG_LOG" "${{ inputs.heartbeat_url }}" "${{ secrets.HEARTBEAT_TOKEN }}" "${{ github.run_id }}" &
+          HB_PID=$!
+
           for attempt in $(seq 1 50); do
             echo "=== Stream attempt $attempt at $(date) ==="
-            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" && break
-            EXIT_CODE=$?
+            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" 2>&1 | tee -a "$FFMPEG_LOG"
+            EXIT_CODE=${PIPESTATUS[0]}
+            [ "$EXIT_CODE" -eq 0 ] && break
             echo "ffmpeg exited with code $EXIT_CODE, restarting in $((attempt * 2))s..."
             sleep $((attempt * 2 > 30 ? 30 : attempt * 2))
           done
+
+          kill "$HB_PID" 2>/dev/null || true
 
       - name: Live restream (preview)
         if: steps.resolve.outputs.live == 'true' && inputs.preview == 'true'
@@ -303,16 +398,21 @@ jobs:
             AMAP=(-map '[out]' -map 0:a)
           fi
           ARGS=("${VINPUT[@]}" "${AINPUT[@]}" -thread_queue_size 4096 -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" "${AMAP[@]}" -c:v libx264 -preset ultrafast -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -pix_fmt yuv420p -c:a aac -b:a 128k -flush_packets 1 -max_muxing_queue_size 2048)
-          URL="${{ inputs.output_url }}"
-          if [[ "$URL" == srt://* ]]; then
-            ARGS+=(-f mpegts -pkt_size 1316 "$URL")
-          else
-            ARGS+=(-f flv -rtmp_live live "$URL")
-          fi
+          source /tmp/ms_helpers.sh
+          ms_build "${{ inputs.output_url }}" "${{ inputs.output_urls }}" "${{ inputs.account_names }}"
+
+          ARGS+=(-f tee "$TEE_OUT")
+
+          FFMPEG_LOG="/tmp/ffmpeg_live.log"
+          ms_heartbeat_loop "$FFMPEG_LOG" "${{ inputs.heartbeat_url }}" "${{ secrets.HEARTBEAT_TOKEN }}" "${{ github.run_id }}" &
+          HB_PID=$!
+
           for attempt in $(seq 1 50); do
             echo "=== Stream attempt $attempt at $(date) ==="
-            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" && break
-            EXIT_CODE=$?
-            echo "ffmpeg exited with code $EXIT_CODE, restarting in $((attempt * 2))s..."
+            ffmpeg -hide_banner -loglevel warning "${ARGS[@]}" 2>&1 | tee -a "$FFMPEG_LOG"
+            FF_EXIT=${PIPESTATUS[0]}
+            [ "$FF_EXIT" -eq 0 ] && break
             sleep $((attempt * 2 > 30 ? 30 : attempt * 2))
           done
+
+          kill "$HB_PID" 2>/dev/null || true

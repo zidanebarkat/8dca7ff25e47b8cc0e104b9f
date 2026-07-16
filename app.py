@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, redirect
-import os, time, json, requests, threading, subprocess
+import os, time, json, requests, threading, subprocess, hashlib
 
 _ENV = {}
 
@@ -122,6 +122,8 @@ DEFAULTS = {
     'fb_chat_token': '',
     'yt_chat_enabled': False,
     'youtube_api_key': '',
+    'kick_accounts': [],
+    'kick_run_id': '',
 }
 
 wanted = False
@@ -131,6 +133,12 @@ tt_wanted = False
 fb_wanted = False
 fb_now_wanted = False
 kick_chill_wanted = False
+_hb_lock = threading.Lock()
+_last_heartbeat = {}
+HEARTBEAT_TOKEN = os.environ.get("HEARTBEAT_TOKEN", "")
+
+def url_hash(url):
+    return hashlib.sha256(url.strip().encode()).hexdigest()[:8]
 
 def load_config():
     try:
@@ -157,7 +165,8 @@ def log(msg):
         if len(log_buffer) > 200:
             log_buffer[:] = log_buffer[-200:]
 
-def trigger_workflow(source_url, output_url, preview=False):
+def trigger_workflow(source_url, output_url, preview=False,
+                     output_urls='', account_names='', heartbeat_url=''):
     cfg = load_config()
     token = cfg.get('github_token') or GITHUB_TOKEN
     owner = cfg.get('github_owner') or GITHUB_OWNER
@@ -196,6 +205,9 @@ def trigger_workflow(source_url, output_url, preview=False):
         'browser_overlay_url': cfg.get('browser_overlay_url', ''),
         'github_token': token,
         'cookies_b64': cookies_b64,
+        'output_urls': output_urls,
+        'account_names': account_names,
+        'heartbeat_url': heartbeat_url,
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
@@ -633,7 +645,26 @@ def get_status():
     if token and owner and repo:
         run_id = get_active_run(token, owner, repo)
         live = run_id is not None
-    return jsonify({'live': live, 'config': cfg, 'run_id': run_id, 'keepalive': cfg.get('keepalive', False), 'wanted': wanted})
+    if not cfg.get('kick_run_id') and live and run_id:
+        cfg['kick_run_id'] = str(run_id)
+        save_config(cfg)
+    accounts = cfg.get('kick_accounts', [])
+    with _hb_lock:
+        hb = dict(_last_heartbeat)
+    stale = (time.time() - hb.get('received_at', 0) > 25) if hb.get('received_at') else True
+    kick_accounts = [
+        {
+            'name': a['name'],
+            'url_hash': url_hash(a['url']),
+            'status': 'unknown' if stale else hb.get('accounts', {}).get(url_hash(a['url']), {}).get('status', 'pending'),
+        }
+        for a in accounts
+    ]
+    return jsonify({
+        'live': live, 'config': cfg, 'run_id': run_id,
+        'keepalive': cfg.get('keepalive', False), 'wanted': wanted,
+        'kick_accounts': kick_accounts, 'kick_run_id': cfg.get('kick_run_id', ''),
+    })
 
 @app.route('/start')
 def start_stream():
@@ -666,6 +697,103 @@ def stop_stream():
     cancel_workflow(run_id, token, owner, repo)
     log('Workflow cancelled')
     return jsonify({'ok': True})
+
+@app.route('/kick/accounts', methods=['GET'])
+def kick_accounts_get():
+    cfg = load_config()
+    accounts = cfg.get('kick_accounts', [])
+    with _hb_lock:
+        hb = dict(_last_heartbeat)
+    stale = (time.time() - hb.get('received_at', 0) > 25) if hb.get('received_at') else True
+    result = []
+    for acc in accounts:
+        h = url_hash(acc['url'])
+        live_status = hb.get('accounts', {}).get(h, {}).get('status')
+        result.append({
+            'name': acc['name'],
+            'url_masked': acc['url'][-20:],
+            'url_hash': h,
+            'status': 'unknown' if stale else (live_status or 'pending'),
+        })
+    return jsonify({'accounts': result, 'stale': stale, 'run_id': cfg.get('kick_run_id', '')})
+
+@app.route('/kick/accounts', methods=['POST'])
+def kick_accounts_post():
+    data = request.get_json(force=True, silent=True) or {}
+    accounts = data.get('accounts', [])
+    for acc in accounts:
+        if not acc.get('name') or not acc.get('url'):
+            return jsonify({'error': 'each account needs name and url'}), 400
+    cfg = load_config()
+    cfg['kick_accounts'] = accounts
+    save_config(cfg)
+    return jsonify({'accounts': accounts}), 200
+
+@app.route('/kick/start', methods=['POST'])
+def kick_start():
+    cfg = load_config()
+    source_url = cfg.get('source_url')
+    accounts = cfg.get('kick_accounts', [])
+    if accounts:
+        primary_url = accounts[0]['url']
+        extra_urls = '\n'.join(a['url'] for a in accounts[1:])
+        names = '\n'.join(a['name'] for a in accounts)
+    else:
+        primary_url = cfg.get('output_url')
+        extra_urls = ''
+        names = ''
+    status, run_id, err = trigger_workflow(
+        source_url=source_url,
+        output_url=primary_url,
+        preview=False,
+        output_urls=extra_urls,
+        account_names=names,
+        heartbeat_url='https://strwithgit.pythonanywhere.com/kick/heartbeat',
+    )
+    if status != 'triggered':
+        return jsonify({'error': err or 'dispatch failed'}), 502
+    return jsonify({'ok': True}), 200
+
+@app.route('/kick/stop', methods=['POST'])
+def kick_stop():
+    cfg = load_config()
+    run_id = cfg.get('kick_run_id')
+    if not run_id:
+        token = cfg.get('github_token') or GITHUB_TOKEN
+        owner = cfg.get('github_owner') or GITHUB_OWNER
+        repo = cfg.get('github_repo') or GITHUB_REPO
+        found = get_active_run(token, owner, repo)
+        run_id = str(found) if found else None
+    if not run_id:
+        return jsonify({'error': 'no active run found'}), 400
+    token = cfg.get('github_token') or GITHUB_TOKEN
+    owner = cfg.get('github_owner') or GITHUB_OWNER
+    repo = cfg.get('github_repo') or GITHUB_REPO
+    ok = cancel_workflow(run_id, token, owner, repo)
+    cfg['kick_run_id'] = ''
+    save_config(cfg)
+    with _hb_lock:
+        _last_heartbeat.clear()
+    if not ok:
+        return jsonify({'error': 'cancel may have failed, check GitHub Actions'}), 502
+    return jsonify({'ok': True}), 200
+
+@app.route('/kick/heartbeat', methods=['POST'])
+def kick_heartbeat():
+    if request.headers.get('X-Heartbeat-Token') != HEARTBEAT_TOKEN:
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.get_json(force=True, silent=True) or {}
+    run_id = data.get('run_id')
+    if not run_id:
+        return jsonify({'error': 'missing run_id'}), 400
+    with _hb_lock:
+        _last_heartbeat.update({
+            'run_id': run_id,
+            'accounts': {a['url_hash']: a for a in data.get('accounts', []) if 'url_hash' in a},
+            'uptime_seconds': data.get('uptime_seconds', 0),
+            'received_at': time.time(),
+        })
+    return jsonify({'ok': True}), 200
 
 @app.route('/logs')
 def get_logs():
