@@ -3278,42 +3278,27 @@ def get_terabox_run_logs(run_id, token, owner):
         return r.text
     return ''
 
+RENDER_PROXY = 'https://yt-proxy-2j0r.onrender.com'
+
 @app.route('/terabox')
 def terabox_index():
     return HTML_TERABOX_PANEL
 
-@app.route('/terabox/status')
-def terabox_status():
-    cfg = load_config()
-    token = cfg.get('github_token') or GITHUB_TOKEN
-    owner = cfg.get('github_owner') or GITHUB_OWNER
-    running = False
-    run_info = None
-    share_url = None
-    if token and owner:
-        run = get_terabox_run(token, owner)
-        if run:
-            running = True
-            run_info = {
-                'id': run['id'],
-                'status': run['status'],
-                'conclusion': run.get('conclusion'),
-                'created_at': run.get('created_at', ''),
-                'updated_at': run.get('updated_at', ''),
-            }
-            if run['status'] == 'completed' and run.get('conclusion') == 'success':
-                logs = get_terabox_run_logs(run['id'], token, owner)
-                import re as _re
-                for line in logs.split('\n'):
-                    if 'Share URL:' in line or 'DONE:' in line:
-                        parts = line.split('Share URL:' if 'Share URL:' in line else 'DONE:')
-                        if len(parts) > 1:
-                            txt = parts[-1].strip()
-                            m = _re.search(r'https?://\S+', txt)
-                            if m:
-                                share_url = m.group(0)
-                                break
-    return jsonify({'running': running, 'run': run_info, 'share_url': share_url})
+@app.route('/terabox/status/<task_id>')
+def terabox_status(task_id):
+    try:
+        r = requests.get(f'{RENDER_PROXY}/api/progress/{task_id}', timeout=10)
+        resp = r.json()
+        if resp.get('ok'):
+            status = resp.get('status', 'unknown')
+            percent = resp.get('percent', 0)
+            if status == 'done':
+                share_url = resp.get('video_url', '')
+                return jsonify({'ok': True, 'status': 'done', 'share_url': share_url, 'percent': 100})
+            return jsonify({'ok': True, 'status': status, 'percent': percent, 'filename': resp.get('filename', '')})
+        return jsonify({'ok': False, 'error': resp.get('error', 'Unknown')})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 @app.route('/terabox/start', methods=['POST'])
 def terabox_start():
@@ -3327,10 +3312,25 @@ def terabox_start():
         cfg = load_config()
         cfg['cookies_b64'] = cookies_b64
         save_config(cfg)
-    task_id, err = trigger_terabox_workflow(url, quality)
-    if err:
-        return jsonify({'ok': False, 'error': err})
-    return jsonify({'ok': True, 'task_id': task_id, 'msg': 'GH Actions workflow triggered'})
+        import base64
+        try:
+            decoded = base64.b64decode(cookies_b64).decode('utf-8', errors='replace')
+            if not decoded.lstrip().startswith('#'):
+                decoded = cookies_b64
+            requests.post(f'{RENDER_PROXY}/api/upload_cookies',
+                         json={'cookies': decoded}, timeout=15)
+        except Exception:
+            pass
+    try:
+        r = requests.post(f'{RENDER_PROXY}/api/dl-terabox',
+                         json={'url': url, 'quality': quality}, timeout=30)
+        resp = r.json()
+        if resp.get('ok'):
+            task_id = resp['task_id']
+            return jsonify({'ok': True, 'task_id': task_id, 'msg': 'Download + upload started on Render.com'})
+        return jsonify({'ok': False, 'error': resp.get('error', 'Unknown error')})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 HTML_TERABOX_PANEL = r'''<!DOCTYPE html>
 <html lang="en">
@@ -3381,7 +3381,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
   <a href="/chat" style="padding:8px 16px;background:#30363d;color:#c9d1d9;border-radius:6px;text-decoration:none;font-size:14px">Chat</a>
 </div>
 <h1>TeraBox Uploader</h1>
-<p style="color:#8b949e;margin-bottom:16px;font-size:14px">YouTube video → download on GitHub Actions (2 CPU, 7GB RAM) → upload to TeraBox → get share link</p>
+<p style="color:#8b949e;margin-bottom:16px;font-size:14px">YouTube video → download on Render.com (residential IPs = 720p+) → upload to TeraBox → share link. No GitHub Actions needed.</p>
 <div class="status-bar">
   <span><span class="status-dot" id="statusDot"></span><span id="statusText">Idle</span></span>
   <span id="runTime" style="color:#8b949e;font-size:13px"></span>
@@ -3417,6 +3417,7 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
 </div>
 </div>
 <script>
+var pollTimer=null;
 function startUpload(){
   var url=document.getElementById('ytUrl').value.trim();
   if(!url){alert('Enter a YouTube URL');return}
@@ -3427,13 +3428,13 @@ function startUpload(){
   }
   document.getElementById('startBtn').disabled=true;
   document.getElementById('statusDot').className='status-dot running';
-  document.getElementById('statusText').textContent='Triggering GH Actions...';
+  document.getElementById('statusText').textContent='Starting Render pipeline...';
   document.getElementById('resultBox').style.display='none';
   fetch('/terabox/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,quality:q,cookies_b64:cookies})})
   .then(r=>r.json()).then(d=>{
     if(d.ok){
-      document.getElementById('statusText').textContent='Running on GitHub Actions...';
-      pollStatus();
+      document.getElementById('statusText').textContent='Running on Render.com...';
+      pollStatus(d.task_id);
     } else {
       document.getElementById('statusDot').className='status-dot error';
       document.getElementById('statusText').textContent='Error: '+(d.error||'unknown');
@@ -3445,42 +3446,32 @@ function startUpload(){
     document.getElementById('startBtn').disabled=false;
   });
 }
-var pollTimer=null;
-function pollStatus(){
-  if(pollTimer)clearInterval(pollTimer);
-  pollTimer=setInterval(()=>{
-    fetch('/terabox/status').then(r=>r.json()).then(d=>{
-      if(d.share_url){
-        clearInterval(pollTimer);
-        document.getElementById('statusDot').className='status-dot done';
-        document.getElementById('statusText').textContent='Upload complete!';
-        document.getElementById('resultBox').style.display='block';
-        document.getElementById('shareUrl').href=d.share_url;
-        document.getElementById('shareUrl').textContent=d.share_url;
-        document.getElementById('startBtn').disabled=false;
-      } else if(d.running){
-        document.getElementById('statusDot').className='status-dot running';
-        document.getElementById('statusText').textContent='Running... ('+d.run.status+')';
-      } else {
-        clearInterval(pollTimer);
-        document.getElementById('statusDot').className='status-dot';
-        document.getElementById('statusText').textContent='Idle';
-        document.getElementById('startBtn').disabled=false;
-      }
-    }).catch(()=>{});
-  },10000);
+function pollStatus(taskId){
+  if(pollTimer)clearTimeout(pollTimer);
+  fetch('/terabox/status/'+taskId).then(r=>r.json()).then(d=>{
+    if(!d.ok){document.getElementById('statusText').textContent='Error: '+(d.error||'unknown');return}
+    if(d.status==='done'){
+      clearInterval(pollTimer);
+      document.getElementById('statusDot').className='status-dot done';
+      document.getElementById('statusText').textContent='Upload complete!';
+      document.getElementById('resultBox').style.display='block';
+      document.getElementById('shareUrl').href=d.share_url;
+      document.getElementById('shareUrl').textContent=d.share_url;
+      document.getElementById('startBtn').disabled=false;
+      return;
+    }
+    var pct=d.percent||0;
+    var label=d.status==='downloading'?'Downloading':d.status==='uploading'?'Uploading to TeraBox':d.status==='merging'?'Merging':d.status;
+    document.getElementById('statusText').textContent=label+'... '+pct.toFixed(0)+'%';
+    pollTimer=setTimeout(function(){pollStatus(taskId)},3000);
+  }).catch(e=>{
+    document.getElementById('statusText').textContent='Polling...';
+    pollTimer=setTimeout(function(){pollStatus(taskId)},5000);
+  });
 }
 function copyUrl(){
   navigator.clipboard.writeText(document.getElementById('shareUrl').textContent);
 }
-fetch('/terabox/status').then(r=>r.json()).then(d=>{
-  if(d.running){document.getElementById('startBtn').disabled=false;pollStatus();}
-  if(d.share_url){
-    document.getElementById('resultBox').style.display='block';
-    document.getElementById('shareUrl').href=d.share_url;
-    document.getElementById('shareUrl').textContent=d.share_url;
-  }
-});
 </script>
 </body>
 </html>'''
