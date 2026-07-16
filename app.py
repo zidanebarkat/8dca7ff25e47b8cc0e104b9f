@@ -322,10 +322,9 @@ def trigger_tt_workflow(source_url, tiktok_key):
     inputs = {
         'source_url': source_url,
         'output_url': output_url,
+        'title': cfg.get('tt_title', 'Live Stream'),
         'overlay_text': cfg.get('overlay_text', ''),
-        'cookies_b64': cookies_b64,
         'github_token': token,
-        'source_duration': str(cfg.get('tt_source_duration', 1800)),
     }
     data = {'ref': 'main', 'inputs': inputs}
     r = requests.post(url, json=data, headers=headers)
