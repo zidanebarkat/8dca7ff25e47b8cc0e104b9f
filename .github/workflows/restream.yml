@@ -294,15 +294,15 @@ jobs:
           BEVELED="drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x1a0b2e:x=(w-text_w)/2+5:y=(h-text_h)/2+5,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x3a1f5e:x=(w-text_w)/2+3:y=(h-text_h)/2+3,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0x6b3f96:x=(w-text_w)/2+1:y=(h-text_h)/2+1,drawtext=textfile=overlay.txt:reload=1:fontfile=$FONT:fontsize=h*0.05:fontcolor=0xC9A2FF:box=1:boxcolor=0x0a0512@0.6:boxborderw=26:bordercolor=0x1a0b2e:borderw=2:x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.85:shadowx=6:shadowy=6"
           VF="[0:v]scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,$BEVELED[main];[1:v]format=rgba[ov];[main][ov]overlay=20:main_h-overlay_h-20:format=auto,format=yuv420p[out]"
           if [ -n "$HLS_AUDIO" ]; then
-            VINPUT=(-protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -thread_queue_size 1024 -i "$HLS")
-            AINPUT=(-thread_queue_size 1024 -i "$HLS_AUDIO")
+            VINPUT=(-protocol_whitelist "$PWL" -fflags +discardcorrupt+genpts+igndts -err_detect ignore_err -timeout 30000000 -thread_queue_size 4096 -i "$HLS")
+            AINPUT=(-thread_queue_size 4096 -i "$HLS_AUDIO")
             AMAP=(-map '[out]' -map 1:a)
           else
-            VINPUT=(-protocol_whitelist "$PWL" -fflags +discardcorrupt -timeout 30000000 -thread_queue_size 1024 -i "$HLS")
+            VINPUT=(-protocol_whitelist "$PWL" -fflags +discardcorrupt+genpts+igndts -err_detect ignore_err -timeout 30000000 -thread_queue_size 4096 -i "$HLS")
             AINPUT=()
             AMAP=(-map '[out]' -map 0:a)
           fi
-          ARGS=("${VINPUT[@]}" "${AINPUT[@]}" -thread_queue_size 1024 -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" "${AMAP[@]}" -c:v libx264 -preset ultrafast -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -pix_fmt yuv420p -c:a aac -b:a 128k -flush_packets 1 -max_muxing_queue_size 9999)
+          ARGS=("${VINPUT[@]}" "${AINPUT[@]}" -thread_queue_size 4096 -f image2pipe -framerate 5 -c:v png -i /tmp/chat_overlay_fifo -filter_complex "$VF" "${AMAP[@]}" -c:v libx264 -preset ultrafast -r 30 -b:v 6000k -maxrate 6000k -bufsize 12000k -g 60 -x264-params "keyint=60:min-keyint=60:level=5.1" -pix_fmt yuv420p -c:a aac -b:a 128k -flush_packets 1 -max_muxing_queue_size 2048)
           URL="${{ inputs.output_url }}"
           if [[ "$URL" == srt://* ]]; then
             ARGS+=(-f mpegts -pkt_size 1316 "$URL")
