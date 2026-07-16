@@ -2225,6 +2225,13 @@ h1{font-size:22px;margin-bottom:20px;color:#fff}
       <input type="url" name="browser_overlay_url" id="browser_overlay_url" placeholder="https://kicktools.app/fusion_chat/fusion-chat.html?kick=...">
       <div style="font-size:11px;color:#8b949e;margin-top:2px">Generate one at <a href="/chat" style="color:#58a6ff">Chat Overlay Generator</a> or paste any widget URL</div>
     </div>
+    <div class="form-group">
+      <label>YouTube Cookies (for YouTube sources — export from Chrome via "Get cookies.txt")</label>
+      <textarea name="yt_cookies" id="yt_cookies" rows="3" placeholder="Paste Netscape cookies.txt content from Chrome (YouTube must be logged in)"></textarea>
+      <div style="font-size:11px;color:#8b949e;margin-top:2px">
+        Use <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" style="color:#58a6ff">Get cookies.txt LOCALLY</a> extension on youtube.com.
+      </div>
+    </div>
     <div class="form-group" style="margin-top:4px">
       <label style="display:flex;align-items:center;gap:8px">
         <input type="checkbox" name="tt_keepalive" id="tt_keepalive" onchange="saveConfig()" style="width:auto">
