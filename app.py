@@ -882,8 +882,8 @@ def tt_stop():
     save_config(cfg)
     token = cfg.get('github_token')
     owner = cfg.get('github_owner')
-    repo = cfg.get('github_repo')
-    if not token or not owner or not repo:
+    repo = cfg.get('tt_repo') or '8dca7ff25e47b8cc0e104b9f-tt'
+    if not token or not owner:
         return jsonify({'ok': False, 'error': 'GitHub not configured'})
     run_id = get_active_run(token, owner, repo)
     if not run_id:
