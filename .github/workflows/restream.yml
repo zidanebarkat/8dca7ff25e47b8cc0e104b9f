@@ -86,20 +86,23 @@ jobs:
           
           # Detect protocol from RTMP URL
           if [[ "$RTMP_URL" == srt://* ]]; then
-            # SRT protocol (Kick)
+            # SRT protocol (Kick) - URL already contains full params
             OUTPUT_URL="${RTMP_URL}"
             OUTPUT_FORMAT="mpegts"
             EXTRA_FFMPEG_ARGS="-f mpegts"
+            AUDIO_CODEC="copy"
           elif [[ "$RTMP_URL" == rtmps://* ]]; then
             # RTMPS protocol
             OUTPUT_URL="${RTMP_URL}${STREAM_KEY}"
             OUTPUT_FORMAT="flv"
             EXTRA_FFMPEG_ARGS="-f flv -flvflags no_duration_filesize"
+            AUDIO_CODEC="aac"
           else
             # RTMP protocol (Twitch)
             OUTPUT_URL="${RTMP_URL}${STREAM_KEY}"
             OUTPUT_FORMAT="flv"
             EXTRA_FFMPEG_ARGS="-f flv -flvflags no_duration_filesize"
+            AUDIO_CODEC="aac"
           fi
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
@@ -142,7 +145,9 @@ jobs:
             -i "$TMP_FILE" \
             -map 0:v:0 -map 0:a:0 \
             -c:v copy \
-            -c:a aac -b:a 128k -ar 44100 \
+            -c:a $AUDIO_CODEC \
+            -b:a 128k \
+            -ar 44100 \
             -fps_mode passthrough \
             $EXTRA_FFMPEG_ARGS \
             "$OUTPUT_URL"
