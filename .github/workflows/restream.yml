@@ -109,13 +109,13 @@ jobs:
           
           # Use yt-dlp for YouTube (handles cookies), streamlink for others
           if [[ "${{ steps.resolve.outputs.stream_url }}" == *"youtube.com"* || "${{ steps.resolve.outputs.stream_url }}" == *"youtu.be"* ]]; then
-            # Use yt-dlp with cookies and extractor args - try tv client first for live streams
+            # Use yt-dlp with cookies and extractor args - use web client only, skip initial API
             yt-dlp \
               -f "bv*+ba/b" \
               --no-live-from-start \
               --no-part \
               --cookies youtube_cookies.txt \
-              --extractor-args "youtube:player_client=tv_embedded,web;player_skip=js" \
+              --extractor-args "youtube:player_client=web;player_skip=js,hls,manifest;skip=webpage" \
               --no-check-certificates \
               -o "$TMP_FILE" \
               "${{ steps.resolve.outputs.stream_url }}" &
