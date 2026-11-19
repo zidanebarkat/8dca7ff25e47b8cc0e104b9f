@@ -109,12 +109,14 @@ jobs:
           
           # Use yt-dlp for YouTube (handles cookies), streamlink for others
           if [[ "${{ steps.resolve.outputs.stream_url }}" == *"youtube.com"* || "${{ steps.resolve.outputs.stream_url }}" == *"youtu.be"* ]]; then
-            # Use yt-dlp with cookies for YouTube
+            # Use yt-dlp with cookies and extractor args to bypass n challenge
             yt-dlp \
               -f "bv*+ba/b" \
               --no-live-from-start \
               --no-part \
               --cookies youtube_cookies.txt \
+              --extractor-args "youtube:player_client=android,web_embedded;player_skip=js" \
+              --no-check-certificates \
               -o "$TMP_FILE" \
               "${{ steps.resolve.outputs.stream_url }}" &
             DL_PID=$!
