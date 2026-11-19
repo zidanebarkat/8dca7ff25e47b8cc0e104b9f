@@ -1,0 +1,131 @@
+name: Restream Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Target platform'
+        required: true
+        type: choice
+        options: [Twitch, YouTube, TikTok, Kick, Facebook]
+      action:
+        description: 'Action'
+        required: true
+        type: choice
+        options: [start, stop]
+      source_url:
+        description: 'Source stream/video URL (YouTube, .m3u8, etc.)'
+        required: false
+        default: ''
+      rtmp_url:
+        description: 'RTMP URL (auto-filled for TikTok)'
+        required: false
+        default: ''
+      stream_key:
+        description: 'Stream key'
+        required: false
+        default: ''
+      title:
+        description: 'Stream title'
+        required: false
+        default: 'Live Stream'
+      quality:
+        description: 'Video quality preset'
+        required: false
+        type: choice
+        options: [high, medium, low]
+        default: 'high'
+
+jobs:
+  restream:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'start'
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Install dependencies
+        run: pip install yt-dlp curl_cffi
+
+      - name: Resolve source URL
+        id: resolve
+        env:
+          SOURCE_URL: ${{ github.event.inputs.source_url }}
+        run: |
+          if [ -n "$SOURCE_URL" ]; then
+            # Check if it's a direct URL (m3u8, mp4, etc.)
+            if echo "$SOURCE_URL" | grep -qE '\.(m3u8|mp4|flv|ts)'; then
+              echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
+            else
+              # Try to resolve with yt-dlp
+              STREAM_URL=$(yt-dlp -f "best[height<=1080]" -g "$SOURCE_URL" 2>/dev/null || echo "")
+              if [ -n "$STREAM_URL" ]; then
+                echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
+              else
+                echo "Error: Could not resolve source URL" >&2
+                exit 1
+              fi
+            fi
+          else
+            echo "Error: source_url is required" >&2
+            exit 1
+          fi
+
+      - name: Start restream
+        env:
+          PLATFORM: ${{ github.event.inputs.platform }}
+          RTMP_URL: ${{ github.event.inputs.rtmp_url }}
+          STREAM_KEY: ${{ github.event.inputs.stream_key }}
+          STREAM_URL: ${{ steps.resolve.outputs.stream_url }}
+          QUALITY: ${{ github.event.inputs.quality }}
+        run: |
+          # Build full RTMP URL
+          FULL_RTMP="${RTMP_URL}${STREAM_KEY}"
+          
+          # Set quality presets
+          case "$QUALITY" in
+            high)
+              VIDEO_BITRATE="6000k"
+              AUDIO_BITRATE="192k"
+              SCALE="1920:1080"
+              ;;
+            medium)
+              VIDEO_BITRATE="4500k"
+              AUDIO_BITRATE="128k"
+              SCALE="1280:720"
+              ;;
+            low)
+              VIDEO_BITRATE="3000k"
+              AUDIO_BITRATE="128k"
+              SCALE="854:480"
+              ;;
+          esac
+          
+          echo "Starting restream to $PLATFORM"
+          echo "Source: $STREAM_URL"
+          echo "RTMP: $FULL_RTMP"
+          echo "Quality: $QUALITY ($VIDEO_BITRATE, $SCALE)"
+          
+          # Start FFmpeg restream
+          ffmpeg -re \
+            -i "$STREAM_URL" \
+            -c:v libx264 -preset veryfast -b:v "$VIDEO_BITRATE" \
+            -vf "scale=$SCALE" \
+            -c:a aac -b:a "$AUDIO_BITRATE" \
+            -ar 44100 \
+            -f flv "$FULL_RTMP" &
+          
+          FF_PID=$!
+          echo "FFmpeg started with PID: $FF_PID"
+          
+          # Wait for FFmpeg to finish or timeout
+          wait $FF_PID
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "FFmpeg exited with code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
