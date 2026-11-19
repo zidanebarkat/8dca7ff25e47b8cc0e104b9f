@@ -61,7 +61,7 @@ jobs:
               echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
             else
               # Try to resolve with yt-dlp
-              STREAM_URL=$(yt-dlp -f "best[height<=1080]" -g "$SOURCE_URL" 2>/dev/null || echo "")
+              STREAM_URL=$(yt-dlp -f "bv*+ba/b" -g "$SOURCE_URL" 2>/dev/null || echo "")
               if [ -n "$STREAM_URL" ]; then
                 echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
               else
@@ -114,7 +114,8 @@ jobs:
           TMP_FILE="/tmp/stream_input_$$.mp4"
           
           # Start yt-dlp in background writing to temp file
-          yt-dlp -f "best[height<=1080]" -o "$TMP_FILE" "$STREAM_URL" &
+          # Use -f "bv*+ba/b" to get best video+audio, fallback to best single
+          yt-dlp -f "bv*+ba/b" -o "$TMP_FILE" "$STREAM_URL" &
           YT_PID=$!
           
           # Give yt-dlp a moment to start downloading
