@@ -102,11 +102,14 @@ jobs:
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
+          # Run yt-dlp with visible output for debugging, pipe to ffmpeg
+          # Use --no-wait-video to start downloading immediately
           yt-dlp \
             -f "bv*+ba/b" \
             --live-from-start \
             --no-part \
-            -o - "${{ steps.resolve.outputs.stream_url }}" 2>/dev/null | \
+            --no-wait-video \
+            -o - "${{ steps.resolve.outputs.stream_url }}" | \
           ffmpeg -re \
             -thread_queue_size 16384 \
             -fflags +genpts+discardcorrupt \
