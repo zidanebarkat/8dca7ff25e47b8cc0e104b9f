@@ -92,27 +92,45 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink to save to file, then ffmpeg streams the file
-          # This avoids the HLS segfault issue by separating download from streaming
+          # Use streamlink with retry loop to handle HLS discontinuities
           TMP_FILE="/tmp/stream_live_$$.ts"
           
-          # Start streamlink saving to file (no buffering issues)
-          streamlink --output "$TMP_FILE" --hls-live-restart "$STREAM_URL" best &
-          SL_PID=$!
+          # Function to start streamlink with retries
+          start_streamlink() {
+            streamlink --output "$TMP_FILE" \
+              --hls-live-restart \
+              --hls-live-edge 3 \
+              --hls-segment-attempts 3 \
+              --hls-segment-threads 3 \
+              --retry-streams 3 \
+              --retry-max 5 \
+              --retry-open 3 \
+              "$STREAM_URL" best
+          }
           
-          # Wait for file to start being written
-          for i in {1..20}; do
+          # Start streamlink in background with retries
+          while true; do
+            start_streamlink &
+            SL_PID=$!
+            
+            # Wait for file to start being written
+            for i in {1..30}; do
+              if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
+                break
+              fi
+              sleep 1
+            done
+            
             if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
               break
             fi
-            sleep 1
-          done
-          
-          if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
-            echo "ERROR: streamlink failed to write to temp file"
+            
+            echo "Streamlink failed to write, retrying in 5s..."
             kill $SL_PID 2>/dev/null
-            exit 1
-          fi
+            wait $SL_PID 2>/dev/null
+            rm -f "$TMP_FILE"
+            sleep 5
+          done
           
           echo "Streamlink writing to $TMP_FILE, starting ffmpeg to stream it..."
           
