@@ -89,34 +89,24 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink to write to temp file, ffmpeg reads from it
-          TMP_FILE="/tmp/stream_input_$$.ts"
+          # Use streamlink to pipe via named pipe (FIFO) to ffmpeg
+          FIFO_FILE="/tmp/stream_fifo_$$"
+          mkfifo "$FIFO_FILE"
           
-          # Start streamlink in background writing to temp file with HLS live restart
-          streamlink --output "$TMP_FILE" --hls-live-restart "$STREAM_URL" best &
+          # Start streamlink writing to FIFO
+          streamlink --stdout --hls-live-restart "$STREAM_URL" best > "$FIFO_FILE" 2>/dev/null &
           SL_PID=$!
           
-          # Wait for streamlink to start writing (check file exists and has content)
-          for i in {1..30}; do
-            if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
-              break
-            fi
-            sleep 1
-          done
+          # Give streamlink a moment to connect
+          sleep 3
           
-          if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
-            echo "ERROR: streamlink failed to write to temp file"
-            kill $SL_PID 2>/dev/null
-            exit 1
-          fi
-          
-          echo "Streamlink writing to $TMP_FILE, starting ffmpeg..."
-          
-          # Start FFmpeg reading from the growing temp file with robust flags
+          # Start FFmpeg reading from FIFO with robust settings
           ffmpeg -re \
+            -analyzeduration 5000000 \
+            -probesize 5000000 \
             -fflags +genpts \
             -thread_queue_size 8192 \
-            -i "$TMP_FILE" \
+            -i "$FIFO_FILE" \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
             -f flv \
@@ -128,7 +118,7 @@ jobs:
           # Cleanup
           kill $SL_PID 2>/dev/null
           wait $SL_PID 2>/dev/null
-          rm -f "$TMP_FILE"
+          rm -f "$FIFO_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
