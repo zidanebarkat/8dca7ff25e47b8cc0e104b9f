@@ -89,13 +89,37 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use ffmpeg directly on HLS URL with robust live stream settings
+          # Use streamlink to save to file, then ffmpeg streams the file
+          # This avoids the HLS segfault issue by separating download from streaming
+          TMP_FILE="/tmp/stream_live_$$.ts"
+          
+          # Start streamlink saving to file (no buffering issues)
+          streamlink --output "$TMP_FILE" --hls-live-restart "$STREAM_URL" best &
+          SL_PID=$!
+          
+          # Wait for file to start being written
+          for i in {1..20}; do
+            if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
+              break
+            fi
+            sleep 1
+          done
+          
+          if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
+            echo "ERROR: streamlink failed to write to temp file"
+            kill $SL_PID 2>/dev/null
+            exit 1
+          fi
+          
+          echo "Streamlink writing to $TMP_FILE, starting ffmpeg to stream it..."
+          
+          # Start ffmpeg streaming the growing file
+          # -re reads at native frame rate
+          # -stream_loop -1 would loop but we want live, so just read the growing file
           ffmpeg -re \
-            -analyzeduration 10000000 \
-            -probesize 10000000 \
             -fflags +genpts \
             -thread_queue_size 16384 \
-            -i "$STREAM_URL" \
+            -i "$TMP_FILE" \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
             -f flv \
@@ -103,6 +127,11 @@ jobs:
             "$FULL_RTMP"
           
           EXIT_CODE=$?
+          
+          # Cleanup
+          kill $SL_PID 2>/dev/null
+          wait $SL_PID 2>/dev/null
+          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
