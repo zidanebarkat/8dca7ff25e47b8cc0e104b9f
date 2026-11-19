@@ -89,13 +89,17 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink's built-in RTMP streaming capability
-          # streamlink can output directly to RTMP using --player with rtmp:// URL
-          # Or use --player-external-http for HTTP-FLV, but we need RTMP
-          # Best: use streamlink's --player to pipe to ffmpeg RTMP output
+          # Use streamlink's --player with a wrapper script
+          # Create wrapper script for ffmpeg
+          cat > /tmp/ffmpeg_wrapper.sh << 'EOF'
+          #!/bin/bash
+          exec ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -ar 44100 -f flv "$1"
+          EOF
+          chmod +x /tmp/ffmpeg_wrapper.sh
+          
           streamlink \
             --hls-live-restart \
-            --player "ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -ar 44100 -f flv \"$FULL_RTMP\"" \
+            --player "/tmp/ffmpeg_wrapper.sh $FULL_RTMP" \
             "$STREAM_URL" best
           
           EXIT_CODE=$?
