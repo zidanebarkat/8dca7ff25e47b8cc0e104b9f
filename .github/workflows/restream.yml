@@ -111,7 +111,6 @@ jobs:
             -f "bv*+ba/b" \
             --live-from-start \
             --no-part \
-            --no-wait-video \
             -o "$TMP_FILE" \
             "${{ steps.resolve.outputs.stream_url }}" &
           YT_PID=$!
