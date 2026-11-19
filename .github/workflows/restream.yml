@@ -105,11 +105,11 @@ jobs:
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
           # Start yt-dlp in background downloading to temp file
-          # --live-from-start gets from beginning of live stream
+          # --no-live-from-start downloads from current live time (no VOD needed)
           # --no-part avoids .part extension
           yt-dlp \
             -f "bv*+ba/b" \
-            --live-from-start \
+            --no-live-from-start \
             --no-part \
             -o "$TMP_FILE" \
             "${{ steps.resolve.outputs.stream_url }}" &
