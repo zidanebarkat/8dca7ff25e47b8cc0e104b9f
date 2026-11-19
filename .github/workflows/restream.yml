@@ -80,8 +80,10 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use yt-dlp to pipe stream to ffmpeg (handles Twitch auth, HLS, reconnection)
-          # yt-dlp manages cookies, signed URLs, segment fetching, reconnection
+          # yt-dlp downloads to temp file, ffmpeg reads growing file (no -re)
+          # This handles Twitch auth/HLS/reconnection via yt-dlp
+          TMP_FILE="/tmp/stream_live_$$.ts"
+          
           # Detect protocol from RTMP URL
           if [[ "$RTMP_URL" == srt://* ]]; then
             # SRT protocol (Kick)
@@ -102,19 +104,43 @@ jobs:
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
-          # Run yt-dlp with visible output for debugging, pipe to ffmpeg
-          # Use --no-wait-video to start downloading immediately
+          # Start yt-dlp in background downloading to temp file
+          # --live-from-start gets from beginning of live stream
+          # --no-part avoids .part extension
           yt-dlp \
             -f "bv*+ba/b" \
             --live-from-start \
             --no-part \
             --no-wait-video \
-            -o - "${{ steps.resolve.outputs.stream_url }}" | \
-          ffmpeg -re \
+            -o "$TMP_FILE" \
+            "${{ steps.resolve.outputs.stream_url }}" &
+          YT_PID=$!
+          
+          # Wait for yt-dlp to start writing data
+          for i in {1..30}; do
+            if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
+              echo "yt-dlp writing to $TMP_FILE, size: $(stat -c%s "$TMP_FILE") bytes"
+              break
+            fi
+            sleep 1
+          done
+          
+          if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
+            echo "ERROR: yt-dlp failed to write to temp file"
+            kill $YT_PID 2>/dev/null
+            wait $YT_PID 2>/dev/null
+            exit 1
+          fi
+          
+          echo "Starting ffmpeg to stream growing file..."
+          
+          # Start ffmpeg reading growing file (WITHOUT -re to avoid segfault)
+          # -re causes segfault on growing files with copy codec
+          ffmpeg \
             -thread_queue_size 16384 \
             -fflags +genpts+discardcorrupt \
             -err_detect ignore_err \
-            -i pipe:0 \
+            -i "$TMP_FILE" \
             -map 0:v:0 -map 0:a:0 \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
@@ -122,7 +148,12 @@ jobs:
             $EXTRA_FFMPEG_ARGS \
             "$OUTPUT_URL"
           
-          EXIT_CODE=${PIPESTATUS[1]}
+          EXIT_CODE=$?
+          
+          # Cleanup
+          kill $YT_PID 2>/dev/null
+          wait $YT_PID 2>/dev/null
+          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
