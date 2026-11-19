@@ -116,7 +116,7 @@ jobs:
             --retry-streams 3 \
             --retry-max 5 \
             --retry-open 3 \
-            --http-cookie "$(cat youtube_cookies.txt | grep -v '^#' | awk -F'\t' '{print $6"="$7}' | tr '\n' '; ')" \
+            --http-cookies-file youtube_cookies.txt \
             "${{ steps.resolve.outputs.stream_url }}" best &
           DL_PID=$!
           DL_TOOL="streamlink"
