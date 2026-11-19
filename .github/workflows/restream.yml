@@ -93,11 +93,11 @@ jobs:
           TMP_FILE="/tmp/stream_input_$$.ts"
           
           # Start streamlink in background writing to temp file with HLS live restart
-          streamlink --output "$TMP_FILE" --hls-live-restart --hls-segment-threads 4 "$STREAM_URL" best &
+          streamlink --output "$TMP_FILE" --hls-live-restart "$STREAM_URL" best &
           SL_PID=$!
           
           # Wait for streamlink to start writing (check file exists and has content)
-          for i in {1..10}; do
+          for i in {1..30}; do
             if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
               break
             fi
