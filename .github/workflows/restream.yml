@@ -82,6 +82,26 @@ jobs:
           
           # Use yt-dlp to pipe stream to ffmpeg (handles Twitch auth, HLS, reconnection)
           # yt-dlp manages cookies, signed URLs, segment fetching, reconnection
+          # Detect protocol from RTMP URL
+          if [[ "$RTMP_URL" == srt://* ]]; then
+            # SRT protocol (Kick)
+            OUTPUT_URL="${RTMP_URL}"
+            OUTPUT_FORMAT="mpegts"
+            EXTRA_FFMPEG_ARGS="-f mpegts"
+          elif [[ "$RTMP_URL" == rtmps://* ]]; then
+            # RTMPS protocol
+            OUTPUT_URL="${RTMP_URL}${STREAM_KEY}"
+            OUTPUT_FORMAT="flv"
+            EXTRA_FFMPEG_ARGS="-f flv -flvflags no_duration_filesize"
+          else
+            # RTMP protocol (Twitch)
+            OUTPUT_URL="${RTMP_URL}${STREAM_KEY}"
+            OUTPUT_FORMAT="flv"
+            EXTRA_FFMPEG_ARGS="-f flv -flvflags no_duration_filesize"
+          fi
+          
+          echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
+          
           yt-dlp \
             -f "bv*+ba/b" \
             --live-from-start \
@@ -96,9 +116,8 @@ jobs:
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
             -fps_mode passthrough \
-            -f flv \
-            -flvflags no_duration_filesize \
-            "$FULL_RTMP"
+            $EXTRA_FFMPEG_ARGS \
+            "$OUTPUT_URL"
           
           EXIT_CODE=${PIPESTATUS[1]}
           

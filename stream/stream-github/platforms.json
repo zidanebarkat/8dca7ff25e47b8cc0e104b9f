@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Twitch",
+    "rtmp_url": "rtmp://live.twitch.tv/app/",
+    "stream_key": "live_1520647186_xdYUTvUanm0KRkJv2MVCwI4o05WCa5",
+    "enabled": true,
+    "status": "idle"
+  },
+  {
+    "name": "YouTube",
+    "rtmp_url": "rtmp://a.rtmp.youtube.com/live2/",
+    "stream_key": "",
+    "enabled": true,
+    "status": "idle"
+  },
+  {
+    "name": "TikTok",
+    "rtmp_url": "",
+    "stream_key": "",
+    "enabled": true,
+    "status": "idle"
+  },
+  {
+    "name": "Kick",
+    "rtmp_url": "srt://fa723fc1b171.srt.live-video.net:9000?streamid=sk_us-west-2_flRTxoYfb7fy_Dh2NGVAqOPSRbQURTdggPPxZial2zz&passphrase=Ha392eIEgZzj3zrYxZ5HyHHb5P78fIoYcHu95QEwMzylZs8v5uip9rAL4Xi7Xp4i7fHiyG8VmdoU8NN",
+    "stream_key": "",
+    "enabled": true,
+    "status": "idle"
+  },
+  {
+    "name": "Facebook",
+    "rtmp_url": "rtmps://live-api-s.facebook.com:443/rtmp/",
+    "stream_key": "",
+    "enabled": true,
+    "status": "idle"
+  }
+]
