@@ -117,14 +117,17 @@ jobs:
           echo "Streamlink writing to $TMP_FILE, starting ffmpeg to stream it..."
           
           # Start ffmpeg streaming the growing file
-          # Remove -re to avoid segfault on growing file with copy codec
-          # RTMP server will handle buffering
+          # Robust flags for live HLS passthrough
           ffmpeg \
-            -fflags +genpts \
+            -err_detect ignore_err \
+            -fflags +genpts+discardcorrupt \
             -thread_queue_size 16384 \
             -i "$TMP_FILE" \
+            -map 0:v:0 -map 0:a:0 \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
+            -vsync 0 \
+            -copyts \
             -f flv \
             -flvflags no_duration_filesize \
             "$FULL_RTMP"
