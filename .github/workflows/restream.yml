@@ -89,22 +89,46 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink with HLS live restart, pipe to ffmpeg with robust flags
-          # -fflags +genpts: generate missing PTS
-          # -thread_queue_size: larger buffer for live stream
-          # -reconnect: auto reconnect on network issues
-          streamlink --stdout --hls-live-restart --hls-segment-threads 4 "$STREAM_URL" best 2>/dev/null | \
+          # Use streamlink to write to temp file, ffmpeg reads from it
+          TMP_FILE="/tmp/stream_input_$$.ts"
+          
+          # Start streamlink in background writing to temp file with HLS live restart
+          streamlink --output "$TMP_FILE" --hls-live-restart --hls-segment-threads 4 "$STREAM_URL" best &
+          SL_PID=$!
+          
+          # Wait for streamlink to start writing (check file exists and has content)
+          for i in {1..10}; do
+            if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
+              break
+            fi
+            sleep 1
+          done
+          
+          if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
+            echo "ERROR: streamlink failed to write to temp file"
+            kill $SL_PID 2>/dev/null
+            exit 1
+          fi
+          
+          echo "Streamlink writing to $TMP_FILE, starting ffmpeg..."
+          
+          # Start FFmpeg reading from the growing temp file with robust flags
           ffmpeg -re \
             -fflags +genpts \
-            -thread_queue_size 4096 \
-            -i pipe:0 \
+            -thread_queue_size 8192 \
+            -i "$TMP_FILE" \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
             -f flv \
             -flvflags no_duration_filesize \
             "$FULL_RTMP"
           
-          EXIT_CODE=${PIPESTATUS[1]}
+          EXIT_CODE=$?
+          
+          # Cleanup
+          kill $SL_PID 2>/dev/null
+          wait $SL_PID 2>/dev/null
+          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
