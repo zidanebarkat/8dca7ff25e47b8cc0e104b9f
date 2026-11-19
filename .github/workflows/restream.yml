@@ -109,18 +109,31 @@ jobs:
           echo "RTMP: $FULL_RTMP"
           echo "Quality: $QUALITY ($VIDEO_BITRATE, $SCALE)"
           
-          # Use streamlink to pipe stream to FFmpeg
-          # streamlink handles Twitch auth/HLS natively, outputs to stdout
-          streamlink --stdout "$STREAM_URL" best 2>/dev/null | \
+          # Use streamlink to write stream to temp file, ffmpeg reads from it
+          TMP_FILE="/tmp/stream_input_$$.ts"
+          
+          # Start streamlink in background writing to temp file
+          streamlink --output "$TMP_FILE" "$STREAM_URL" best &
+          SL_PID=$!
+          
+          # Give streamlink a moment to start downloading
+          sleep 5
+          
+          # Start FFmpeg reading from the growing temp file
           ffmpeg -re \
-            -i pipe:0 \
+            -i "$TMP_FILE" \
             -c:v libx264 -preset veryfast -b:v "$VIDEO_BITRATE" \
             -vf "scale=$SCALE" \
             -c:a aac -b:a "$AUDIO_BITRATE" \
             -ar 44100 \
             -f flv "$FULL_RTMP"
           
-          EXIT_CODE=${PIPESTATUS[1]}  # Get ffmpeg exit code
+          EXIT_CODE=$?
+          
+          # Cleanup
+          kill $SL_PID 2>/dev/null
+          wait $SL_PID 2>/dev/null
+          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
