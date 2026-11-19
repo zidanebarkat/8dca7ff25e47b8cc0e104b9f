@@ -61,7 +61,7 @@ jobs:
               echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
             else
               # Try to resolve with yt-dlp
-              STREAM_URL=$(yt-dlp -f "bv*+ba/b" -g "$SOURCE_URL" 2>/dev/null || echo "")
+              STREAM_URL=$(yt-dlp -g "$SOURCE_URL" 2>/dev/null || echo "")
               if [ -n "$STREAM_URL" ]; then
                 echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
               else
@@ -114,8 +114,8 @@ jobs:
           TMP_FILE="/tmp/stream_input_$$.ts"
           
           # Start yt-dlp in background writing to temp file
-          # Use -f "best" to get best available format (works with Twitch HLS)
-          yt-dlp -f "best" --no-part --live-from-start -o "$TMP_FILE" "$STREAM_URL" &
+          # No format selector = auto best merged; --no-live-from-start for live streams
+          yt-dlp --no-part --no-live-from-start -o "$TMP_FILE" "$STREAM_URL" &
           YT_PID=$!
           
           # Give yt-dlp a moment to start downloading
