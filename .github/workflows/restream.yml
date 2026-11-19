@@ -89,22 +89,23 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink's --player with a wrapper script
-          # Create wrapper script for ffmpeg
-          cat > /tmp/ffmpeg_wrapper.sh << 'EOF'
-          #!/bin/bash
-          exec ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -ar 44100 -f flv "$1"
-          EOF
-          chmod +x /tmp/ffmpeg_wrapper.sh
+          # Use streamlink --stdout piped to ffmpeg (most reliable)
+          streamlink --stdout --hls-live-restart "$STREAM_URL" best 2>/dev/null | \
+          ffmpeg -re \
+            -analyzeduration 5000000 \
+            -probesize 5000000 \
+            -fflags +genpts \
+            -thread_queue_size 8192 \
+            -i pipe:0 \
+            -c:v copy \
+            -c:a aac -b:a 128k -ar 44100 \
+            -f flv \
+            -flvflags no_duration_filesize \
+            "$FULL_RTMP"
           
-          streamlink \
-            --hls-live-restart \
-            --player "/tmp/ffmpeg_wrapper.sh $FULL_RTMP" \
-            "$STREAM_URL" best
-          
-          EXIT_CODE=$?
+          EXIT_CODE=${PIPESTATUS[1]}
           
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "Streamlink/ffmpeg exited with code $EXIT_CODE"
+            echo "FFmpeg exited with code $EXIT_CODE"
             exit $EXIT_CODE
           fi
