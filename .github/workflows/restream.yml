@@ -89,14 +89,20 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink to pipe directly to FFmpeg with minimal processing
-          # Use copy codec to avoid segfault on re-encoding
-          streamlink --stdout "$STREAM_URL" best 2>/dev/null | \
+          # Use streamlink with HLS live restart, pipe to ffmpeg with robust flags
+          # -fflags +genpts: generate missing PTS
+          # -thread_queue_size: larger buffer for live stream
+          # -reconnect: auto reconnect on network issues
+          streamlink --stdout --hls-live-restart --hls-segment-threads 4 "$STREAM_URL" best 2>/dev/null | \
           ffmpeg -re \
+            -fflags +genpts \
+            -thread_queue_size 4096 \
             -i pipe:0 \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
-            -f flv "$FULL_RTMP"
+            -f flv \
+            -flvflags no_duration_filesize \
+            "$FULL_RTMP"
           
           EXIT_CODE=${PIPESTATUS[1]}
           
