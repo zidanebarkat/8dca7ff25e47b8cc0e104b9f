@@ -95,13 +95,11 @@ jobs:
           # Use streamlink with retry loop to handle HLS discontinuities
           TMP_FILE="/tmp/stream_live_$$.ts"
           
-          # Function to start streamlink with retries
+          # Function to start streamlink with retries (using supported flags only)
           start_streamlink() {
             streamlink --output "$TMP_FILE" \
               --hls-live-restart \
-              --hls-live-edge 3 \
-              --hls-segment-attempts 3 \
-              --hls-segment-threads 3 \
+              --hls-live-edge 5 \
               --retry-streams 3 \
               --retry-max 5 \
               --retry-open 3 \
@@ -144,7 +142,7 @@ jobs:
             -map 0:v:0 -map 0:a:0 \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
-            -vsync 0 \
+            -fps_mode passthrough \
             -copyts \
             -f flv \
             -flvflags no_duration_filesize \
