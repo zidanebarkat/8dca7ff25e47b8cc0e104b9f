@@ -109,18 +109,32 @@ jobs:
           echo "RTMP: $FULL_RTMP"
           echo "Quality: $QUALITY ($VIDEO_BITRATE, $SCALE)"
           
-          # Use yt-dlp to pipe stream to FFmpeg (handles HLS/auth better)
-          # yt-dlp outputs to stdout, FFmpeg reads from stdin
-          yt-dlp -f "best[height<=1080]" -o - "$STREAM_URL" 2>/dev/null | \
+          # Use yt-dlp to write stream to temp file, ffmpeg reads from it
+          # This handles HLS streams properly (yt-dlp downloads segments, ffmpeg reads)
+          TMP_FILE="/tmp/stream_input_$$.mp4"
+          
+          # Start yt-dlp in background writing to temp file
+          yt-dlp -f "best[height<=1080]" -o "$TMP_FILE" "$STREAM_URL" &
+          YT_PID=$!
+          
+          # Give yt-dlp a moment to start downloading
+          sleep 5
+          
+          # Start FFmpeg reading from the growing temp file
           ffmpeg -re \
-            -i pipe:0 \
+            -i "$TMP_FILE" \
             -c:v libx264 -preset veryfast -b:v "$VIDEO_BITRATE" \
             -vf "scale=$SCALE" \
             -c:a aac -b:a "$AUDIO_BITRATE" \
             -ar 44100 \
             -f flv "$FULL_RTMP"
           
-          EXIT_CODE=${PIPESTATUS[1]}  # Get ffmpeg exit code
+          EXIT_CODE=$?
+          
+          # Cleanup
+          kill $YT_PID 2>/dev/null
+          wait $YT_PID 2>/dev/null
+          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
