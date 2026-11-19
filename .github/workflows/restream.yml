@@ -133,10 +133,10 @@ jobs:
           
           echo "Starting ffmpeg to stream growing file..."
           
-          # Start ffmpeg reading growing file (WITHOUT -re to avoid segfault)
-          # -re causes segfault on growing files with copy codec
-          ffmpeg \
-            -thread_queue_size 16384 \
+          # Start ffmpeg reading growing file WITH -re (read at native frame rate)
+          # Use large thread_queue_size and flags to handle growing file without segfault
+          ffmpeg -re \
+            -thread_queue_size 32768 \
             -fflags +genpts+discardcorrupt \
             -err_detect ignore_err \
             -i "$TMP_FILE" \
