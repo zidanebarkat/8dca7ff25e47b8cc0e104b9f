@@ -64,7 +64,7 @@ jobs:
               echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
             else
               # Try to resolve with yt-dlp (more reliable for Twitch)
-              STREAM_URL=$(yt-dlp -f "best" -g "$SOURCE_URL" 2>/dev/null || echo "")
+              STREAM_URL=$(yt-dlp -f "bv*+ba/b" --get-url "$SOURCE_URL" 2>/dev/null || echo "")
               if [ -n "$STREAM_URL" ]; then
                 echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
               else
@@ -92,53 +92,20 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink with retry loop to handle HLS discontinuities
-          TMP_FILE="/tmp/stream_live_$$.ts"
-          
-          # Function to start streamlink with retries (using supported flags only)
-          start_streamlink() {
-            streamlink --output "$TMP_FILE" \
-              --hls-live-restart \
-              --hls-live-edge 5 \
-              --retry-streams 3 \
-              --retry-max 5 \
-              --retry-open 3 \
-              "$STREAM_URL" best
-          }
-          
-          # Start streamlink in background with retries
-          while true; do
-            start_streamlink &
-            SL_PID=$!
-            
-            # Wait for file to start being written
-            for i in {1..30}; do
-              if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
-                break
-              fi
-              sleep 1
-            done
-            
-            if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
-              break
-            fi
-            
-            echo "Streamlink failed to write, retrying in 5s..."
-            kill $SL_PID 2>/dev/null
-            wait $SL_PID 2>/dev/null
-            rm -f "$TMP_FILE"
-            sleep 5
-          done
-          
-          echo "Streamlink writing to $TMP_FILE, starting ffmpeg to stream it..."
-          
-          # Start ffmpeg streaming the growing file
-          # Robust flags for live HLS passthrough
+          # Use ffmpeg directly on HLS with robust reconnect options
+          # This handles HLS discontinuities and network issues natively
           ffmpeg \
-            -err_detect ignore_err \
-            -fflags +genpts+discardcorrupt \
+            -re \
+            -reconnect 1 \
+            -reconnect_at_eof 1 \
+            -reconnect_streamed 1 \
+            -reconnect_delay_max 5 \
             -thread_queue_size 16384 \
-            -i "$TMP_FILE" \
+            -analyzeduration 10000000 \
+            -probesize 10000000 \
+            -fflags +genpts+discardcorrupt \
+            -err_detect ignore_err \
+            -i "$STREAM_URL" \
             -map 0:v:0 -map 0:a:0 \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
@@ -149,11 +116,6 @@ jobs:
             "$FULL_RTMP"
           
           EXIT_CODE=$?
-          
-          # Cleanup
-          kill $SL_PID 2>/dev/null
-          wait $SL_PID 2>/dev/null
-          rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
