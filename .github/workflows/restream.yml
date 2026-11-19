@@ -48,7 +48,7 @@ jobs:
         uses: FedericoCarboni/setup-ffmpeg@v3
 
       - name: Install dependencies
-        run: pip install yt-dlp curl_cffi
+        run: pip install streamlink
 
       - name: Resolve source URL
         id: resolve
@@ -60,8 +60,8 @@ jobs:
             if echo "$SOURCE_URL" | grep -qE '\.(m3u8|mp4|flv|ts)'; then
               echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
             else
-              # Try to resolve with yt-dlp
-              STREAM_URL=$(yt-dlp -g "$SOURCE_URL" 2>/dev/null || echo "")
+              # Try to resolve with streamlink (better for live streams)
+              STREAM_URL=$(streamlink --stream-url "$SOURCE_URL" best 2>/dev/null || echo "")
               if [ -n "$STREAM_URL" ]; then
                 echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
               else
@@ -109,33 +109,18 @@ jobs:
           echo "RTMP: $FULL_RTMP"
           echo "Quality: $QUALITY ($VIDEO_BITRATE, $SCALE)"
           
-          # Use yt-dlp to write stream to temp file, ffmpeg reads from it
-          # This handles HLS streams properly (yt-dlp downloads segments, ffmpeg reads)
-          TMP_FILE="/tmp/stream_input_$$.ts"
-          
-          # Start yt-dlp in background writing to temp file
-          # No format selector = auto best merged; --no-live-from-start for live streams
-          yt-dlp --no-part --no-live-from-start -o "$TMP_FILE" "$STREAM_URL" &
-          YT_PID=$!
-          
-          # Give yt-dlp a moment to start downloading
-          sleep 5
-          
-          # Start FFmpeg reading from the growing temp file
+          # Use streamlink to pipe stream to FFmpeg
+          # streamlink handles Twitch auth/HLS natively, outputs to stdout
+          streamlink --stdout "$STREAM_URL" best 2>/dev/null | \
           ffmpeg -re \
-            -i "$TMP_FILE" \
+            -i pipe:0 \
             -c:v libx264 -preset veryfast -b:v "$VIDEO_BITRATE" \
             -vf "scale=$SCALE" \
             -c:a aac -b:a "$AUDIO_BITRATE" \
             -ar 44100 \
             -f flv "$FULL_RTMP"
           
-          EXIT_CODE=$?
-          
-          # Cleanup
-          kill $YT_PID 2>/dev/null
-          wait $YT_PID 2>/dev/null
-          rm -f "$TMP_FILE"
+          EXIT_CODE=${PIPESTATUS[1]}  # Get ffmpeg exit code
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
