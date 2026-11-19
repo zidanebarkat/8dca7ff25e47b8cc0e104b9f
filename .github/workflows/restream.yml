@@ -109,21 +109,18 @@ jobs:
           echo "RTMP: $FULL_RTMP"
           echo "Quality: $QUALITY ($VIDEO_BITRATE, $SCALE)"
           
-          # Start FFmpeg restream
+          # Use yt-dlp to pipe stream to FFmpeg (handles HLS/auth better)
+          # yt-dlp outputs to stdout, FFmpeg reads from stdin
+          yt-dlp -f "best[height<=1080]" -o - "$STREAM_URL" 2>/dev/null | \
           ffmpeg -re \
-            -i "$STREAM_URL" \
+            -i pipe:0 \
             -c:v libx264 -preset veryfast -b:v "$VIDEO_BITRATE" \
             -vf "scale=$SCALE" \
             -c:a aac -b:a "$AUDIO_BITRATE" \
             -ar 44100 \
-            -f flv "$FULL_RTMP" &
+            -f flv "$FULL_RTMP"
           
-          FF_PID=$!
-          echo "FFmpeg started with PID: $FF_PID"
-          
-          # Wait for FFmpeg to finish or timeout
-          wait $FF_PID
-          EXIT_CODE=$?
+          EXIT_CODE=${PIPESTATUS[1]}  # Get ffmpeg exit code
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
