@@ -107,33 +107,19 @@ jobs:
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
-          # Use yt-dlp for YouTube (handles cookies), streamlink for others
-          if [[ "${{ steps.resolve.outputs.stream_url }}" == *"youtube.com"* || "${{ steps.resolve.outputs.stream_url }}" == *"youtu.be"* ]]; then
-            # Use yt-dlp with cookies and extractor args - use web client only, skip initial API
-            yt-dlp \
-              -f "bv*+ba/b" \
-              --no-live-from-start \
-              --no-part \
-              --cookies youtube_cookies.txt \
-              --extractor-args "youtube:player_client=web;player_skip=js,hls,manifest;skip=webpage" \
-              --no-check-certificates \
-              -o "$TMP_FILE" \
-              "${{ steps.resolve.outputs.stream_url }}" &
-            DL_PID=$!
-            DL_TOOL="yt-dlp"
-          else
-            # Use streamlink for Twitch and others
-            streamlink \
-              --output "$TMP_FILE" \
-              --hls-live-restart \
-              --hls-live-edge 5 \
-              --retry-streams 3 \
-              --retry-max 5 \
-              --retry-open 3 \
-              "${{ steps.resolve.outputs.stream_url }}" best &
-            DL_PID=$!
-            DL_TOOL="streamlink"
-          fi
+          # Use streamlink for all (handles YouTube with cookies, Twitch, etc.)
+          # streamlink handles YouTube auth/HLS well with cookies
+          streamlink \
+            --output "$TMP_FILE" \
+            --hls-live-restart \
+            --hls-live-edge 5 \
+            --retry-streams 3 \
+            --retry-max 5 \
+            --retry-open 3 \
+            --http-cookie "$(cat youtube_cookies.txt | grep -v '^#' | awk -F'\t' '{print $6"="$7}' | tr '\n' '; ')" \
+            "${{ steps.resolve.outputs.stream_url }}" best &
+          DL_PID=$!
+          DL_TOOL="streamlink"
           
           # Wait for downloader to start writing data
           for i in {1..30}; do
