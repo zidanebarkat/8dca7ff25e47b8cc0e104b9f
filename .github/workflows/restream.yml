@@ -114,9 +114,9 @@ jobs:
           echo "Streamlink writing to $TMP_FILE, starting ffmpeg to stream it..."
           
           # Start ffmpeg streaming the growing file
-          # -re reads at native frame rate
-          # -stream_loop -1 would loop but we want live, so just read the growing file
-          ffmpeg -re \
+          # Remove -re to avoid segfault on growing file with copy codec
+          # RTMP server will handle buffering
+          ffmpeg \
             -fflags +genpts \
             -thread_queue_size 16384 \
             -i "$TMP_FILE" \
