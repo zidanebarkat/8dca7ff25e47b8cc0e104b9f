@@ -51,7 +51,7 @@ jobs:
           ffmpeg -version
 
       - name: Install dependencies
-        run: pip install yt-dlp
+        run: pip install streamlink
 
       - name: Resolve source URL
         id: resolve
@@ -80,8 +80,8 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # yt-dlp downloads to temp file, ffmpeg reads growing file (no -re)
-          # This handles Twitch auth/HLS/reconnection via yt-dlp
+          # streamlink handles Twitch HLS natively, outputs to temp file
+          # ffmpeg reads growing file with -re
           TMP_FILE="/tmp/stream_live_$$.ts"
           
           # Detect protocol from RTMP URL
@@ -107,37 +107,39 @@ jobs:
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
-          # Start yt-dlp in background downloading to temp file
-          # --no-live-from-start downloads from current live time (no VOD needed)
-          # --no-part avoids .part extension
-          yt-dlp \
-            -f "bv*+ba/b" \
-            --no-live-from-start \
-            --no-part \
-            -o "$TMP_FILE" \
-            "${{ steps.resolve.outputs.stream_url }}" &
-          YT_PID=$!
+          # Start streamlink in background saving to temp file
+          # --hls-live-restart gets stream from beginning if available
+          # --hls-live-edge 5 starts 5 segments from live edge
+          streamlink \
+            --output "$TMP_FILE" \
+            --hls-live-restart \
+            --hls-live-edge 5 \
+            --retry-streams 3 \
+            --retry-max 5 \
+            --retry-open 3 \
+            "${{ steps.resolve.outputs.stream_url }}" best &
+          SL_PID=$!
           
-          # Wait for yt-dlp to start writing data
+          # Wait for streamlink to start writing data
           for i in {1..30}; do
             if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
-              echo "yt-dlp writing to $TMP_FILE, size: $(stat -c%s "$TMP_FILE") bytes"
+              echo "streamlink writing to $TMP_FILE, size: $(stat -c%s "$TMP_FILE") bytes"
               break
             fi
             sleep 1
           done
           
           if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
-            echo "ERROR: yt-dlp failed to write to temp file"
-            kill $YT_PID 2>/dev/null
-            wait $YT_PID 2>/dev/null
+            echo "ERROR: streamlink failed to write to temp file"
+            kill $SL_PID 2>/dev/null
+            wait $SL_PID 2>/dev/null
             exit 1
           fi
           
           echo "Starting ffmpeg to stream growing file..."
           
-          # Start ffmpeg reading growing file WITH -re (read at native frame rate)
-          # Use large thread_queue_size and flags to handle growing file without segfault
+          # Start ffmpeg reading growing file WITH -re
+          # Use large thread_queue_size and flags to handle growing file
           ffmpeg -re \
             -thread_queue_size 32768 \
             -fflags +genpts+discardcorrupt \
@@ -155,8 +157,8 @@ jobs:
           EXIT_CODE=$?
           
           # Cleanup
-          kill $YT_PID 2>/dev/null
-          wait $YT_PID 2>/dev/null
+          kill $SL_PID 2>/dev/null
+          wait $SL_PID 2>/dev/null
           rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
