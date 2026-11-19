@@ -89,38 +89,18 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink to pipe via named pipe (FIFO) to ffmpeg
-          FIFO_FILE="/tmp/stream_fifo_$$"
-          mkfifo "$FIFO_FILE"
-          
-          # Start streamlink writing to FIFO
-          streamlink --stdout --hls-live-restart "$STREAM_URL" best > "$FIFO_FILE" 2>/dev/null &
-          SL_PID=$!
-          
-          # Give streamlink a moment to connect
-          sleep 3
-          
-          # Start FFmpeg reading from FIFO with robust settings
-          ffmpeg -re \
-            -analyzeduration 5000000 \
-            -probesize 5000000 \
-            -fflags +genpts \
-            -thread_queue_size 8192 \
-            -i "$FIFO_FILE" \
-            -c:v copy \
-            -c:a aac -b:a 128k -ar 44100 \
-            -f flv \
-            -flvflags no_duration_filesize \
-            "$FULL_RTMP"
+          # Use streamlink's built-in RTMP streaming capability
+          # streamlink can output directly to RTMP using --player with rtmp:// URL
+          # Or use --player-external-http for HTTP-FLV, but we need RTMP
+          # Best: use streamlink's --player to pipe to ffmpeg RTMP output
+          streamlink \
+            --hls-live-restart \
+            --player "ffmpeg -re -i pipe:0 -c:v copy -c:a aac -b:a 128k -ar 44100 -f flv \"$FULL_RTMP\"" \
+            "$STREAM_URL" best
           
           EXIT_CODE=$?
           
-          # Cleanup
-          kill $SL_PID 2>/dev/null
-          wait $SL_PID 2>/dev/null
-          rm -f "$FIFO_FILE"
-          
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "FFmpeg exited with code $EXIT_CODE"
+            echo "Streamlink/ffmpeg exited with code $EXIT_CODE"
             exit $EXIT_CODE
           fi
