@@ -48,7 +48,7 @@ jobs:
         uses: FedericoCarboni/setup-ffmpeg@v3
 
       - name: Install dependencies
-        run: pip install streamlink
+        run: pip install streamlink yt-dlp
 
       - name: Resolve source URL
         id: resolve
@@ -60,8 +60,8 @@ jobs:
             if echo "$SOURCE_URL" | grep -qE '\.(m3u8|mp4|flv|ts)'; then
               echo "stream_url=$SOURCE_URL" >> $GITHUB_OUTPUT
             else
-              # Try to resolve with streamlink (better for live streams)
-              STREAM_URL=$(streamlink --stream-url "$SOURCE_URL" best 2>/dev/null || echo "")
+              # Try to resolve with yt-dlp (more reliable for Twitch)
+              STREAM_URL=$(yt-dlp -f "best" -g "$SOURCE_URL" 2>/dev/null || echo "")
               if [ -n "$STREAM_URL" ]; then
                 echo "stream_url=$STREAM_URL" >> $GITHUB_OUTPUT
               else
@@ -89,21 +89,20 @@ jobs:
           echo "Source: $STREAM_URL"
           echo "RTMP: $FULL_RTMP"
           
-          # Use streamlink --stdout piped to ffmpeg (most reliable)
-          streamlink --stdout --hls-live-restart "$STREAM_URL" best 2>/dev/null | \
+          # Use ffmpeg directly on HLS URL with robust live stream settings
           ffmpeg -re \
-            -analyzeduration 5000000 \
-            -probesize 5000000 \
+            -analyzeduration 10000000 \
+            -probesize 10000000 \
             -fflags +genpts \
-            -thread_queue_size 8192 \
-            -i pipe:0 \
+            -thread_queue_size 16384 \
+            -i "$STREAM_URL" \
             -c:v copy \
             -c:a aac -b:a 128k -ar 44100 \
             -f flv \
             -flvflags no_duration_filesize \
             "$FULL_RTMP"
           
-          EXIT_CODE=${PIPESTATUS[1]}
+          EXIT_CODE=$?
           
           if [ $EXIT_CODE -ne 0 ]; then
             echo "FFmpeg exited with code $EXIT_CODE"
