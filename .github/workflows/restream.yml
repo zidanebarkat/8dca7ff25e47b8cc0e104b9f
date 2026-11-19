@@ -51,7 +51,7 @@ jobs:
           ffmpeg -version
 
       - name: Install dependencies
-        run: pip install streamlink
+        run: pip install streamlink yt-dlp
 
       - name: Resolve source URL
         id: resolve
@@ -107,32 +107,45 @@ jobs:
           
           echo "Streaming to: $OUTPUT_URL (format: $OUTPUT_FORMAT)"
           
-          # Start streamlink in background saving to temp file
-          # --hls-live-restart gets stream from beginning if available
-          # --hls-live-edge 5 starts 5 segments from live edge
-          streamlink \
-            --output "$TMP_FILE" \
-            --hls-live-restart \
-            --hls-live-edge 5 \
-            --retry-streams 3 \
-            --retry-max 5 \
-            --retry-open 3 \
-            "${{ steps.resolve.outputs.stream_url }}" best &
-          SL_PID=$!
+          # Use yt-dlp for YouTube (handles cookies), streamlink for others
+          if [[ "${{ steps.resolve.outputs.stream_url }}" == *"youtube.com"* || "${{ steps.resolve.outputs.stream_url }}" == *"youtu.be"* ]]; then
+            # Use yt-dlp with cookies for YouTube
+            yt-dlp \
+              -f "bv*+ba/b" \
+              --no-live-from-start \
+              --no-part \
+              --cookies youtube_cookies.txt \
+              -o "$TMP_FILE" \
+              "${{ steps.resolve.outputs.stream_url }}" &
+            DL_PID=$!
+            DL_TOOL="yt-dlp"
+          else
+            # Use streamlink for Twitch and others
+            streamlink \
+              --output "$TMP_FILE" \
+              --hls-live-restart \
+              --hls-live-edge 5 \
+              --retry-streams 3 \
+              --retry-max 5 \
+              --retry-open 3 \
+              "${{ steps.resolve.outputs.stream_url }}" best &
+            DL_PID=$!
+            DL_TOOL="streamlink"
+          fi
           
-          # Wait for streamlink to start writing data
+          # Wait for downloader to start writing data
           for i in {1..30}; do
             if [ -f "$TMP_FILE" ] && [ -s "$TMP_FILE" ]; then
-              echo "streamlink writing to $TMP_FILE, size: $(stat -c%s "$TMP_FILE") bytes"
+              echo "$DL_TOOL writing to $TMP_FILE, size: $(stat -c%s "$TMP_FILE") bytes"
               break
             fi
             sleep 1
           done
           
           if [ ! -f "$TMP_FILE" ] || [ ! -s "$TMP_FILE" ]; then
-            echo "ERROR: streamlink failed to write to temp file"
-            kill $SL_PID 2>/dev/null
-            wait $SL_PID 2>/dev/null
+            echo "ERROR: $DL_TOOL failed to write to temp file"
+            kill $DL_PID 2>/dev/null
+            wait $DL_PID 2>/dev/null
             exit 1
           fi
           
@@ -157,8 +170,8 @@ jobs:
           EXIT_CODE=$?
           
           # Cleanup
-          kill $SL_PID 2>/dev/null
-          wait $SL_PID 2>/dev/null
+          kill $DL_PID 2>/dev/null
+          wait $DL_PID 2>/dev/null
           rm -f "$TMP_FILE"
           
           if [ $EXIT_CODE -ne 0 ]; then
